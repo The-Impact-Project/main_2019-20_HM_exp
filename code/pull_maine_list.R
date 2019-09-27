@@ -173,9 +173,15 @@ WHERE vb_tsmart_state = 'ME'
   sql() %>%
   read_civis(database = "TMC")
 
+raw_maine_dat %>%
+  saveRDS(here("output", "raw_maine_dat.RDS"))
+
+raw_maine_dat <- readRDS(here("output", "raw_maine_dat.RDS"))
+
 maine_dat <- raw_maine_dat %>%
   mutate(ticketsplitter = na_if(ticketsplitter, "")) %>%
   mutate(ticketsplitter = fct_drop(ticketsplitter)) %>%
+  mutate(HHID = paste(vb_tsmart_full_address, vb_tsmart_city)) %>%
   add_count(vb_tsmart_full_address, name = "household_size") %>% # this should have pasted city with address
   add_count(vb_voterbase_phone, name = "vb_voterbase_phone_count") %>%
   filter(vb_voterbase_registration_status == 'Registered') %>%
@@ -190,12 +196,6 @@ maine_dat <- raw_maine_dat %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment))
   
-district_target_counts <- data.frame(vb_tsmart_sd = c("13", "14", "15", "16"),
-                                     target_count = c(5369, 3010, 7386, 6847))
-
-table(maine_dat$in_experiment)
-
-
 # Check names for matching ------------------------------------------------
 maine_dat %>%
   select(vb_voterid, vb_tsmart_first_name, vb_tsmart_last_name) %>%
@@ -206,7 +206,6 @@ maine_dat %>%
   filter(in_experiment==1) %>%
   select(vb_voterbase_id, vb_voterbase_phone) %>%
   write_csv(here("output", paste0("maine_numbers_for_screen_", Sys.Date(), ".csv")))
-
 
 # Load and rematch phone screen results -----------------------------------
 screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
@@ -219,6 +218,43 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
 
 maine_dat <- maine_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
-  mutate(in_experiment = if_else(passed_phone_screen != "good_number", 0, in_experiment))
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad number", NA), 0, in_experiment))
 
-# for randomization, cluster by HH
+maine_dat <- maine_dat %>%
+  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% maine_dat$vb_voterbase_phone[maine_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
+  mutate(phone_in_exp = if_else(HHID %in% maine_dat$HHID[maine_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
+  mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
+
+randomized_dat <- maine_dat %>%
+  filter(in_experiment==1) %>%
+  balance_randomization(block_vars = "vb_tsmart_sd",
+                        cluster_vars = c("vb_tsmart_full_address", "vb_tsmart_city"),
+                        n_treatment = 2,
+                        balance_vars = "ts_tsmart_partisan_score")
+
+# check if clustering was succesful. this should return character(0)
+intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
+randomized_dat$HHID[randomized_dat$assignment=="treatment"])
+
+randomized_dat %>% 
+  select(assignment, vb_tsmart_sd) %>%
+  table()
+
+district_target_counts <- data.frame(vb_tsmart_sd = c(13, 14, 15, 16),
+                                     target_goal = c(5369, 3010, 7386, 6847))
+
+# see how many more we need in each SD
+randomized_dat %>%
+  filter(assignment == "treatment") %>%
+  group_by(vb_tsmart_sd) %>%
+  summarise(targeted_in_experiment = n()) %>%
+  ungroup() %>%
+  full_join(district_target_counts, by = "vb_tsmart_sd") %>%
+  mutate(more_needed = target_goal - targeted_in_experiment) %>%
+  mutate(more_needed = if_else(more_needed > 0, more_needed, 0))
+
+# add the number of non experiment peole neede din each district.
+
+
+
+
