@@ -4,6 +4,7 @@ library(TIPtools)
 library(tidyverse)
 library(civis)
 library(here)
+library(purrr)
 
 raw_maine_dat <- "SELECT 
   vb_voterbase_id,
@@ -161,12 +162,12 @@ raw_maine_dat <- "SELECT
   am_score,
   hl_score,
   mr_score,
-  -- email,
+  voterbase_email,
   ticketsplitter
 FROM ts.ntl_current
   LEFT JOIN impactproject.segment_scores USING (vb_voterbase_id)
   LEFT JOIN impactproject.me_ticketsplitter USING (vb_voterid)
-  -- LEFT JOIN tmc.email_current USING(vb_voterbase_id)
+  LEFT JOIN tmc.email_current ON ntl_current.vb_voterbase_id = email_current.voterbase_id
 WHERE vb_tsmart_state = 'ME'
   AND vb_tsmart_sd IN ('013', '014', '015', '016')
   AND vb_voterbase_deceased_flag IS NULL" %>%
@@ -216,9 +217,14 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
                                             good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem")))
 
+
+maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6020 / 10799, size = 1)
+
 maine_dat <- maine_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
-  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad number", NA), 0, in_experiment))
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad number", NA), 0, in_experiment)) %>%
+  mutate(in_experiment = if_else(vb_tsmart_sd == 14 & random_num == 0, 0, in_experiment))
+
 
 maine_dat <- maine_dat %>%
   mutate(HH_in_exp = if_else(vb_voterbase_phone %in% maine_dat$vb_voterbase_phone[maine_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
@@ -227,10 +233,16 @@ maine_dat <- maine_dat %>%
 
 randomized_dat <- maine_dat %>%
   filter(in_experiment==1) %>%
-  balance_randomization(block_vars = "vb_tsmart_sd",
+  balance_randomization(block_vars = c("vb_tsmart_sd"),
                         cluster_vars = c("vb_tsmart_full_address", "vb_tsmart_city"),
                         n_treatment = 2,
-                        balance_vars = "ts_tsmart_partisan_score")
+                        balance_vars =c("os_score",
+                                        "am_score",
+                                        "ts_tsmart_offyear_general_turnout_score",
+                                        "ts_tsmart_evangelical_raw_score",
+                                        "ts_tsmart_otherchristian_raw_score",
+                                        "ts_tsmart_prochoice_score",
+                                        "ts_tsmart_path_to_citizen_score"))
 
 # check if clustering was succesful. this should return character(0)
 intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
@@ -241,20 +253,32 @@ randomized_dat %>%
   table()
 
 district_target_counts <- data.frame(vb_tsmart_sd = c(13, 14, 15, 16),
-                                     target_goal = c(5369, 3010, 7386, 6847))
+                                     target_goal = c(5300, 3200, 7300, 6800))
 
 # see how many more we need in each SD
-randomized_dat %>%
+counts_df <- randomized_dat %>%
   filter(assignment == "treatment") %>%
   group_by(vb_tsmart_sd) %>%
   summarise(targeted_in_experiment = n()) %>%
   ungroup() %>%
   full_join(district_target_counts, by = "vb_tsmart_sd") %>%
   mutate(more_needed = target_goal - targeted_in_experiment) %>%
-  mutate(more_needed = if_else(more_needed > 0, more_needed, 0))
+  mutate(more_needed = if_else(more_needed > 0, more_needed, 0)) %>%
+  full_join(filter(maine_dat, in_exp_HH_or_phone==0) %>% group_by(vb_tsmart_sd) %>% summarise(not_in_HH_phone = n()), by = "vb_tsmart_sd") %>%
+  mutate(records_being_added = pmin(more_needed, not_in_HH_phone))
 
-# add the number of non experiment peole neede din each district.
+# add the number of non experiment people needed in each district.
+randomized_dat <- randomized_dat %>%
+  group_by(vb_tsmart_sd) %>% 
+  nest() %>%            
+  ungroup() %>% 
+  arrange(vb_tsmart_sd) %>%
+  left_join(counts_df, by = "vb_tsmart_sd") %>%
+  mutate(samp = map2(data, records_being_added, sample_n)) %>% 
+  unnest(samp) %>% 
+  mutate(assignment = "not_in_experiment") %>%
+  bind_rows(randomized_dat)
 
+table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
 
-
-
+# add diagnostics to check that balance was correct
