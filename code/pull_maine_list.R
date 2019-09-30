@@ -376,5 +376,7 @@ maine_data_for_vendors <- randomized_dat %>%
          voterbase_email,
          assignment)
 
-saveRDS(maine_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(maine_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".csv")))
+saveRDS(maine_data_for_vendors, 
+        here("output", paste0("maine_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(maine_data_for_vendors, 
+          here("output", paste0("maine_data_for_vendors", Sys.Date(), ".csv")))
