@@ -353,8 +353,6 @@ randomized_dat %>%
   ggplot(aes(x=nm_score)) +
   geom_histogram()
 
-
-
 # Save randomized results -------------------------------------------------
 # save full results as RDS
 saveRDS(randomized_dat, here("output", paste0("maine_randomized_dat", Sys.Date(), ".Rds")))
