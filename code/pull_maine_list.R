@@ -223,7 +223,8 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
 
 maine_dat <- maine_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
-  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment))
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment)) %>%
+  mutate(screened_phone = ifelse(passed_phone_screen == "good_number", vb_voterbase_phone, NA))
 
 # 6400 is double the number of people we want to contact in SD14
 num_in_sd14 <- maine_dat %>% filter(vb_tsmart_sd==14, in_experiment==1) %>% nrow()
@@ -351,3 +352,33 @@ randomized_dat %>%
 randomized_dat %>%
   ggplot(aes(x=nm_score)) +
   geom_histogram()
+
+
+
+# Save randomized results -------------------------------------------------
+# save full results as RDS
+saveRDS(randomized_dat, here("output", "maine_randomized_dat.RDS"))
+
+# save dataset for vendors as RDS and CSV
+maine_data_for_vendors <- randomized_dat %>%
+  filter(assignment %in% c("not_in_experiment", "treatment")) %>%
+  select(vb_voterbase_id,
+         vb_voterid,
+         vb_tsmart_sd,
+         vb_tsmart_first_name,
+         vb_tsmart_middle_name,
+         vb_tsmart_last_name,
+         vb_tsmart_name_suffix,
+         vb_tsmart_full_address,
+         vb_tsmart_city,
+         vb_tsmart_state,
+         vb_tsmart_zip,
+         vb_tsmart_zip4,
+         screened_phone,
+         voterbase_email,
+         assignment)
+
+saveRDS(me_data_for_vendors, here("output", "maine_data_for_vendors.RDS"))
+write_csv(me_data_for_vendors, here("output", "maine_data_for_vendors.csv"))
+
+
