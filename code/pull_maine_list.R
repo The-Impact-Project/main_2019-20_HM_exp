@@ -285,6 +285,7 @@ randomized_dat <- maine_dat %>%
   mutate(assignment = "not_in_experiment") %>%
   bind_rows(randomized_dat)
 
+table(randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_sd, randomized_dat$in_experiment, useNA = 'always')
 table(randomized_dat$number_available_to_add, randomized_dat$in_experiment, useNA = 'always')
@@ -300,17 +301,18 @@ randomized_dat %>%
 
 randomized_dat %>%
   filter(in_experiment == 1) %>%
-  select(assignment, vb_vf_party) %>%
+  mutate(party = fct_lump(vb_vf_party)) %>%
+  select(assignment, party) %>%
   table() %>%
   prop.table(margin = 1) %>%
-  round(digits = 3)
+  round(digits = 2)
 
 randomized_dat %>%
   filter(in_experiment == 1) %>%
   select(assignment, vb_education) %>%
   table() %>%
   prop.table(margin = 1) %>%
-  round(digits = 3)
+  round(digits = 2)
 
 randomized_dat %>%
   filter(in_experiment == 1) %>%
