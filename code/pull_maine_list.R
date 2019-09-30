@@ -217,7 +217,8 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
                                             good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem")))
 
-
+# 6400 is double the number of people we want to contact in SD14
+# 10799 is the number of people who can be in the experiment in SD14: maine_dat %>% filter(vb_tsmart_sd==14, in_experiment==1) %>% nrow()
 maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6400 / 10799, size = 1)
 
 maine_dat <- maine_dat %>%
