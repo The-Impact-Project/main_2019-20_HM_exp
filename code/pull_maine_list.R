@@ -175,6 +175,9 @@ WHERE vb_tsmart_state = 'ME'
   read_civis(database = "TMC")
 
 raw_maine_dat %>%
+  mutate(vb_tsmart_zip = str_pad(vb_tsmart_zip, width = 5, pad = "0")) %>%
+  mutate(vb_tsmart_zip4 = str_pad(vb_tsmart_zip4, width = 4, pad = "0")) %>%
+  mutate(college = if_else(vb_education %in% c(3,4), 1, 0)) %>%
   saveRDS(here("output", "raw_maine_dat.RDS"))
 
 raw_maine_dat <- readRDS(here("output", "raw_maine_dat.RDS"))
@@ -191,6 +194,7 @@ maine_dat <- raw_maine_dat %>%
   filter(ts_tsmart_presidential_general_turnout_score > 40) %>%
   filter(household_size < 7) %>%
   filter(vb_voterbase_mailable_flag == "Yes") %>%
+  filter(str_length(vb_tsmart_first_name) > 1) %>%
   add_count(vb_tsmart_full_address, name = "targets_in_hh") %>%
   mutate(in_experiment = 1) %>%
   mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
@@ -217,13 +221,15 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
                                             good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem")))
 
-# 6400 is double the number of people we want to contact in SD14
-# 10799 is the number of people who can be in the experiment in SD14: maine_dat %>% filter(vb_tsmart_sd==14, in_experiment==1) %>% nrow()
-maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6400 / 10799, size = 1)
-
 maine_dat <- maine_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
-  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad number", NA), 0, in_experiment)) %>%
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment))
+
+# 6400 is double the number of people we want to contact in SD14
+num_in_sd14 <- maine_dat %>% filter(vb_tsmart_sd==14, in_experiment==1) %>% nrow()
+maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6400 / num_in_sd14, size = 1)
+
+maine_dat <- maine_dat %>%
   mutate(in_experiment = if_else(vb_tsmart_sd == 14 & random_num == 0, 0, in_experiment))
 
 maine_dat <- maine_dat %>%
@@ -283,19 +289,25 @@ randomized_dat <- maine_dat %>%
   mutate(samp = map2(data, records_being_added, sample_n)) %>% 
   unnest(samp) %>% 
   mutate(assignment = "not_in_experiment") %>%
-  bind_rows(randomized_dat)
+  bind_rows(randomized_dat) %>%
+  select(-c(targeted_in_experiment_so_far, target_goal, more_needed, number_available_to_add, records_being_added))
 
 table(randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_sd, randomized_dat$in_experiment, useNA = 'always')
-table(randomized_dat$number_available_to_add, randomized_dat$in_experiment, useNA = 'always')
-
+table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
 
 # Data Checks -------------------------------------------------------------
 # Check that balance was correct
 randomized_dat %>%
   filter(in_experiment == 1) %>%
   select(assignment, vb_voterbase_gender) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, college) %>%
   table() %>%
   prop.table(margin = 1)
 
@@ -329,3 +341,13 @@ randomized_dat %>%
 
 # Check that standard data issues are not present
 length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
+sum(str_length(randomized_dat$vb_tsmart_first_name) == 1) == 0
+sum(randomized_dat$vb_voterbase_mailable_flag=="Yes") == nrow(randomized_dat)
+
+randomized_dat %>%
+  ggplot(aes(x=ts_tsmart_presidential_general_turnout_score)) +
+  geom_histogram()
+
+randomized_dat %>%
+  ggplot(aes(x=nm_score)) +
+  geom_histogram()
