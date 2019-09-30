@@ -357,7 +357,7 @@ randomized_dat %>%
 
 # Save randomized results -------------------------------------------------
 # save full results as RDS
-saveRDS(randomized_dat, here("output", "maine_randomized_dat.RDS"))
+saveRDS(randomized_dat, here("output", paste0("maine_randomized_dat", Sys.Date(), ".Rds")))
 
 # save dataset for vendors as RDS and CSV
 maine_data_for_vendors <- randomized_dat %>%
@@ -378,7 +378,7 @@ maine_data_for_vendors <- randomized_dat %>%
          voterbase_email,
          assignment)
 
-saveRDS(me_data_for_vendors, here("output", "maine_data_for_vendors.RDS"))
-write_csv(me_data_for_vendors, here("output", "maine_data_for_vendors.csv"))
+saveRDS(me_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(me_data_for_vendors, here("output", paste0("maine_data_for_vendors"), Sys.Date(), ".csv"))
 
 
