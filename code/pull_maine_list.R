@@ -178,7 +178,7 @@ raw_maine_dat %>%
   mutate(vb_tsmart_zip = str_pad(vb_tsmart_zip, width = 5, pad = "0")) %>%
   mutate(vb_tsmart_zip4 = str_pad(vb_tsmart_zip4, width = 4, pad = "0")) %>%
   mutate(college = if_else(vb_education %in% c(3,4), 1, 0)) %>%
-  saveRDS(here("output", "raw_maine_dat.RDS"))
+  saveRDS(here("output", "raw_maine_dat.Rds"))
 
 raw_maine_dat <- readRDS(here("output", "raw_maine_dat.RDS"))
 
@@ -376,7 +376,5 @@ maine_data_for_vendors <- randomized_dat %>%
          voterbase_email,
          assignment)
 
-saveRDS(me_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(me_data_for_vendors, here("output", paste0("maine_data_for_vendors"), Sys.Date(), ".csv"))
-
-
+saveRDS(maine_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(maine_data_for_vendors, here("output", paste0("maine_data_for_vendors", Sys.Date(), ".csv")))
