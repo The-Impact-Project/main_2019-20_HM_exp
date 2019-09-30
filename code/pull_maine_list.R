@@ -218,7 +218,7 @@ screen_dat <- read_csv(here("data", "TMC-ME-Screen.csv")) %>%
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem")))
 
 
-maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6020 / 10799, size = 1)
+maine_dat$random_num <- rbinom(n = nrow(maine_dat), prob = 6400 / 10799, size = 1)
 
 maine_dat <- maine_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
@@ -241,7 +241,8 @@ randomized_dat <- maine_dat %>%
                                         "ts_tsmart_evangelical_raw_score",
                                         "ts_tsmart_otherchristian_raw_score",
                                         "ts_tsmart_prochoice_score",
-                                        "ts_tsmart_path_to_citizen_score"),
+                                        "ts_tsmart_path_to_citizen_score",
+                                        "ts_tsmart_ideology_score"),
                         attempts = 50)
 
 # check if clustering was succesful. this should return character(0)
@@ -259,13 +260,16 @@ district_target_counts <- data.frame(vb_tsmart_sd = c(13, 14, 15, 16),
 counts_df <- randomized_dat %>%
   filter(assignment == "treatment") %>%
   group_by(vb_tsmart_sd) %>%
-  summarise(targeted_in_experiment = n()) %>%
+  summarise(targeted_in_experiment_so_far = n()) %>%
   ungroup() %>%
   full_join(district_target_counts, by = "vb_tsmart_sd") %>%
-  mutate(more_needed = target_goal - targeted_in_experiment) %>%
+  mutate(more_needed = target_goal - targeted_in_experiment_so_far) %>%
   mutate(more_needed = if_else(more_needed > 0, more_needed, 0)) %>%
-  full_join(filter(maine_dat, in_exp_HH_or_phone==0) %>% group_by(vb_tsmart_sd) %>% summarise(not_in_HH_phone = n()), by = "vb_tsmart_sd") %>%
-  mutate(records_being_added = pmin(more_needed, not_in_HH_phone))
+  full_join(filter(maine_dat, in_exp_HH_or_phone==0) %>% 
+              group_by(vb_tsmart_sd) %>% 
+              summarise(number_available_to_add = n()), 
+            by = "vb_tsmart_sd") %>%
+  mutate(records_being_added = pmin(more_needed, number_available_to_add))
 
 # add the number of non experiment people needed in each district.
 randomized_dat <- maine_dat %>%
@@ -282,7 +286,7 @@ randomized_dat <- maine_dat %>%
 
 table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_sd, randomized_dat$in_experiment, useNA = 'always')
-table(randomized_dat$not_in_HH_phone, randomized_dat$in_experiment, useNA = 'always')
+table(randomized_dat$number_available_to_add, randomized_dat$in_experiment, useNA = 'always')
 
 
 # Data Checks -------------------------------------------------------------
