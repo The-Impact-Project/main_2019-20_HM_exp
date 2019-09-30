@@ -225,7 +225,6 @@ maine_dat <- maine_dat %>%
   mutate(in_experiment = if_else(passed_phone_screen %in% c("bad number", NA), 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_tsmart_sd == 14 & random_num == 0, 0, in_experiment))
 
-
 maine_dat <- maine_dat %>%
   mutate(HH_in_exp = if_else(vb_voterbase_phone %in% maine_dat$vb_voterbase_phone[maine_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
   mutate(phone_in_exp = if_else(HHID %in% maine_dat$HHID[maine_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
@@ -242,7 +241,8 @@ randomized_dat <- maine_dat %>%
                                         "ts_tsmart_evangelical_raw_score",
                                         "ts_tsmart_otherchristian_raw_score",
                                         "ts_tsmart_prochoice_score",
-                                        "ts_tsmart_path_to_citizen_score"))
+                                        "ts_tsmart_path_to_citizen_score"),
+                        attempts = 50)
 
 # check if clustering was succesful. this should return character(0)
 intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
@@ -268,7 +268,8 @@ counts_df <- randomized_dat %>%
   mutate(records_being_added = pmin(more_needed, not_in_HH_phone))
 
 # add the number of non experiment people needed in each district.
-randomized_dat <- randomized_dat %>%
+randomized_dat <- maine_dat %>%
+  filter(in_exp_HH_or_phone==0) %>%
   group_by(vb_tsmart_sd) %>% 
   nest() %>%            
   ungroup() %>% 
@@ -280,5 +281,44 @@ randomized_dat <- randomized_dat %>%
   bind_rows(randomized_dat)
 
 table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$vb_tsmart_sd, randomized_dat$in_experiment, useNA = 'always')
+table(randomized_dat$not_in_HH_phone, randomized_dat$in_experiment, useNA = 'always')
 
-# add diagnostics to check that balance was correct
+
+# Data Checks -------------------------------------------------------------
+# Check that balance was correct
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_voterbase_gender) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_vf_party) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 3)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_education) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 3)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  group_by(assignment) %>%
+  summarise(partisan = mean(ts_tsmart_partisan_score),
+            ideology = mean(ts_tsmart_ideology_score),
+            os = mean(os_score, na.rm = T),
+            am = mean(am_score, na.rm = T),
+            turnout = mean(ts_tsmart_offyear_general_turnout_score),
+            evangelical = mean(ts_tsmart_evangelical_raw_score, na.rm = T),
+            otherchristian = mean(ts_tsmart_otherchristian_raw_score, na.rm = T),
+            citizenship = mean(ts_tsmart_path_to_citizen_score),
+            prochoice = mean(ts_tsmart_prochoice_score))
+
+# Check that standard data issues are not present
+length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
