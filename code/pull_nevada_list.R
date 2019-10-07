@@ -163,14 +163,54 @@ raw_nevada_dat <- "SELECT
   am_score,
   hl_score,
   mr_score,
-  voterbase_email,
-  ticketsplitter
+  voterbase_email
 FROM ts.ntl_current
   LEFT JOIN impactproject.segment_scores USING (vb_voterbase_id)
-  LEFT JOIN impactproject.me_ticketsplitter USING (vb_voterid)
   LEFT JOIN tmc.email_current ON ntl_current.vb_voterbase_id = email_current.voterbase_id
 WHERE vb_tsmart_state = 'NV'
-  AND (vb_tsmart_sd IN ('006', '08', '009', '015') OR vb_tsmart_hd IN ('04', '029', '037'))
+  AND (vb_tsmart_sd IN ('006', '008', '009', '015') OR vb_tsmart_hd IN ('004', '029', '037'))
   AND vb_voterbase_deceased_flag IS NULL" %>%
   sql() %>%
   read_civis(database = "TMC")
+
+raw_nevada_dat <- raw_nevada_dat %>%
+  mutate(vb_tsmart_hd = str_pad(vb_tsmart_hd, width = 3, pad = "0")) %>%
+  mutate(vb_tsmart_sd = str_pad(vb_tsmart_sd, width = 3, pad = "0")) %>%
+  mutate(vb_tsmart_zip = str_pad(vb_tsmart_zip, width = 5, pad = "0")) %>%
+  mutate(vb_tsmart_zip4 = str_pad(vb_tsmart_zip4, width = 4, pad = "0")) %>%
+  mutate(college = if_else(vb_education %in% c(3,4), 1, 0))
+
+# Save and Reload raw_nevada_dat ------------------------------------------
+raw_nevada_dat %>%
+  saveRDS(here("output", "raw_nevada_dat.Rds"))
+
+raw_nevada_dat <- readRDS(here("output", "raw_nevada_dat.RDS"))
+
+# Process main nevada dataframe -------------------------------------------
+nevada_dat <- raw_nevada_dat %>%
+  mutate(HHID = paste(vb_tsmart_full_address, vb_tsmart_city)) %>%
+  add_count(vb_tsmart_full_address, name = "household_size") %>% # this should have pasted city with address
+  add_count(vb_voterbase_phone, name = "vb_voterbase_phone_count") %>%
+  filter(vb_voterbase_registration_status == 'Registered') %>%
+  filter(vb_voterbase_age < 95) %>%
+  filter(ts_tsmart_presidential_general_turnout_score > 40) %>%
+  filter(household_size < 7) %>%
+  filter(vb_voterbase_mailable_flag == "Yes") %>%
+  filter(str_length(vb_tsmart_first_name) > 1) %>%
+  add_count(vb_tsmart_full_address, name = "targets_in_hh") %>%
+  mutate(in_experiment = 1) %>%
+  mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
+  mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
+  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment)) %>%
+  mutate(in_experiment = if_else(cell_tsmart_wireless_confidence_score >= 8, 0, in_experiment)) %>%
+  mutate(combined_districts = if_else(vb_tsmart_hd %in% c('004', '029', '037'), 
+                                      paste0("hd_", vb_tsmart_hd), 
+                                      paste0("sd_", vb_tsmart_sd)))
+
+# Output for Phone Screen -------------------------------------------------
+nevada_dat %>%
+  filter(in_experiment==1) %>%
+  select(vb_voterbase_phone) %>%
+  unique() %>%
+  write_csv(here("output", paste0("nevada_numbers_for_screen_", Sys.Date(), ".csv")))
+
