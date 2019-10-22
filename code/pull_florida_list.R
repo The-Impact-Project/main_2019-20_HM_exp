@@ -310,8 +310,6 @@ table(randomized_dat$vb_tsmart_hd, randomized_dat$assignment, useNA = 'always')
 table(randomized_dat$vb_tsmart_hd, randomized_dat$in_experiment, useNA = 'always')
 table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
 
-
-
 # Data Checks -------------------------------------------------------------
 # Check that balance was correct
 randomized_dat %>%
