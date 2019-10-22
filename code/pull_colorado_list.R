@@ -198,16 +198,25 @@ colorado_dat <- raw_co_dat %>%
   mutate(in_experiment = 1) %>%
   mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
-  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment))
-
-# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
+  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment)) %>%
+  filter(in_experiment==1) %>%
+  group_by(vb_tsmart_sd) %>%
+  nest() %>%
+  ungroup() %>%
+  arrange(vb_tsmart_sd) %>%
+  mutate(n = c(12000, 39000, 39000, 27000)) %>%
+  mutate(samp = map2(data, n, sample_n)) %>% 
+  select(-data) %>%
+  unnest(samp)
 
 # Output for Phone Screen -------------------------------------------------
-florida_dat %>%
+colorado_dat %>%
   filter(in_experiment==1) %>%
   select(vb_voterbase_phone) %>%
   unique() %>%
-  write_csv(here("output", paste0("florida_numbers_for_screen_", Sys.Date(), ".csv")))
+  write_csv(here("output", paste0("colorado_numbers_for_screen_", Sys.Date(), ".csv")))
+
+# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
 
 
 # Load and rematch phone screen results -----------------------------------
