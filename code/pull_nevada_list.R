@@ -198,9 +198,11 @@ nevada_dat <- raw_nv_dat %>%
   mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment)) %>%
-  mutate(combined_districts = if_else(vb_tsmart_hd %in% c('004', '029', '037'), 
+  mutate(combined_districts = if_else(vb_tsmart_hd %in% c(4, 27, 29, 37), 
                                       paste0("hd_", vb_tsmart_hd), 
-                                      paste0("sd_", vb_tsmart_sd)))
+                                      paste0("sd_", vb_tsmart_sd))) %>%
+  filter(in_experiment==1) %>% # this row and the next one are only because we have way more people than we need
+  sample_n(150000)
 
 # Output for Phone Screen -------------------------------------------------
 nevada_dat %>%
@@ -214,8 +216,6 @@ nevada_dat %>%
 
 
 # EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
-
-
 
 # Load and rematch phone screen results -----------------------------------
 screen_dat <- read_csv(here("data", "1018-FL-Impact-Project-Screen.csv")) %>%
