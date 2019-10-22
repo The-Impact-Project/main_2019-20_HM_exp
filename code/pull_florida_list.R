@@ -379,7 +379,7 @@ florida_data_for_vendors <- randomized_dat %>%
   filter(assignment %in% c("not_in_experiment", "treatment")) %>%
   select(vb_voterbase_id,
          vb_voterid,
-         vb_tsmart_sd,
+         vb_tsmart_hd,
          vb_tsmart_first_name,
          vb_tsmart_middle_name,
          vb_tsmart_last_name,
@@ -390,6 +390,9 @@ florida_data_for_vendors <- randomized_dat %>%
          vb_tsmart_zip,
          vb_tsmart_zip4,
          screened_phone,
+         vb_voterbase_gender,
+         vb_voterbase_dob,
+         vb_voterbase_age,
          voterbase_email,
          assignment)
 
