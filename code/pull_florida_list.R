@@ -396,11 +396,25 @@ florida_data_for_vendors <- randomized_dat %>%
          voterbase_email,
          vb_voterbase_race,
          screen_result,
-         assignment)
+         assignment,
+         cate,
+         HHID)
 
-saveRDS(florida_data_for_vendors, 
-        here("output", paste0("florida_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(florida_data_for_vendors, 
-          here("output", paste0("florida_data_for_vendors", Sys.Date(), ".csv")))
+florida_data_for_vendors %>%
+  select(-c(cate, HHID)) %>%
+  saveRDS(here("output", paste0("florida_data_for_vendors", Sys.Date(), ".Rds")))
 
+florida_data_for_vendors %>%
+  select(-c(cate, HHID)) %>%
+  write_csv(here("output", paste0("florida_data_for_vendors", Sys.Date(), ".csv")))
 
+# make householded list
+householded <- florida_data_for_vendors %>%
+  arrange(desc(cate)) %>%
+  group_by(HHID) %>%
+  mutate(rownum = row_number()) %>%
+  ungroup() %>%
+  filter(rownum == 1) %>%
+  select(-c(HHID, cate, rownum)) %>%
+  write_csv(here("output", paste0("florida_householded_data_for_vendors", Sys.Date(), ".csv")))
+  
