@@ -394,6 +394,8 @@ florida_data_for_vendors <- randomized_dat %>%
          vb_voterbase_dob,
          vb_voterbase_age,
          voterbase_email,
+         vb_voterbase_race,
+         screen_result,
          assignment)
 
 saveRDS(florida_data_for_vendors, 
