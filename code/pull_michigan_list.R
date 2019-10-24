@@ -409,5 +409,3 @@ saveRDS(michigan_data_for_vendors,
         here("output", paste0("michigan_data_for_vendors", Sys.Date(), ".Rds")))
 write_csv(michigan_data_for_vendors, 
           here("output", paste0("michigan_data_for_vendors", Sys.Date(), ".csv")))
-
-
