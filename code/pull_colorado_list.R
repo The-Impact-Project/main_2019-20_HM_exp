@@ -216,17 +216,18 @@ colorado_dat %>%
   unique() %>%
   write_csv(here("output", paste0("colorado_numbers_for_screen_", Sys.Date(), ".csv")))
 
-# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
-
-
 # Load and rematch phone screen results -----------------------------------
-screen_dat <- read_csv(here("data", "1018-FL-Impact-Project-Screen.csv")) %>%
+screen_dat <- read_csv(here("data", "TMC-CO-_screen.csv")) %>%
   select(result, number) %>%
   rename(screen_result = "result") %>%
   rename(vb_voterbase_phone = "number") %>%
   mutate(passed_phone_screen = fct_collapse(screen_result,
                                             good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem", "Route Unavailable")))
+
+
+# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
+
 
 florida_dat <- florida_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
