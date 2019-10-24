@@ -301,15 +301,11 @@ randomized_dat <- randomized_dat %>%
   filter(combined_districts %in% c('sd_8','sd_9') | id <=5000 | get_treated == FALSE) %>%
   select(-id)
 
-
-
-# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
-
-
-
 # check randomization and adding non-experiment people seems right
 table(randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$assignment != "control", useNA = 'always')
 table(randomized_dat$combined_districts, randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$combined_districts, randomized_dat$assignment != "control", useNA = 'always')
 table(randomized_dat$combined_districts, randomized_dat$in_experiment, useNA = 'always')
 table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
 
@@ -373,7 +369,7 @@ randomized_dat %>%
 saveRDS(randomized_dat, here("output", paste0("nevada_randomized_dat", Sys.Date(), ".Rds")))
 
 # save dataset for vendors as RDS and CSV
-florida_data_for_vendors <- randomized_dat %>%
+nevada_data_for_vendors <- randomized_dat %>%
   filter(assignment %in% c("not_in_experiment", "treatment")) %>%
   select(vb_voterbase_id,
          vb_voterid,
@@ -392,11 +388,12 @@ florida_data_for_vendors <- randomized_dat %>%
          vb_voterbase_dob,
          vb_voterbase_age,
          voterbase_email,
-         assignment)
+         assignment,
+         screen_result)
 
-saveRDS(florida_data_for_vendors, 
+saveRDS(nevada_data_for_vendors, 
         here("output", paste0("nevada_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(florida_data_for_vendors, 
+write_csv(nevada_data_for_vendors, 
           here("output", paste0("nevada_data_for_vendors", Sys.Date(), ".csv")))
 
 
