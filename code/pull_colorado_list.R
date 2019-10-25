@@ -217,7 +217,7 @@ colorado_dat %>%
   write_csv(here("output", paste0("colorado_numbers_for_screen_", Sys.Date(), ".csv")))
 
 # Load and rematch phone screen results -----------------------------------
-screen_dat <- read_csv(here("data", "TMC-CO-_screen.csv")) %>%
+screen_dat <- read_csv(here("data", "TMC-CO-Screen.csv")) %>%
   select(result, number) %>%
   rename(screen_result = "result") %>%
   rename(vb_voterbase_phone = "number") %>%
@@ -225,31 +225,34 @@ screen_dat <- read_csv(here("data", "TMC-CO-_screen.csv")) %>%
                                             good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
                                             bad_number = c("Fast Busy", "FAX", "Operator", "Problem", "Route Unavailable")))
 
-
-# EVERYTHING BELOW THIS NEEDS TO BE UPDATED -------------------------------
-
-
-florida_dat <- florida_dat %>%
+colorado_dat <- colorado_dat %>%
   left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
   mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment)) %>%
   mutate(screened_phone = ifelse(passed_phone_screen == "good_number", vb_voterbase_phone, NA))
 
+# move some people out of experiment in districts where we have too many people
+colorado_dat <- colorado_dat %>%
+  sample_n(size = nrow(.), replace = FALSE) %>%
+  group_by(vb_tsmart_sd, in_experiment) %>%
+  mutate(id = row_number()) %>%
+  ungroup() %>%
+  mutate(in_experiment = if_else(vb_tsmart_sd == 25 & in_experiment == 1 & id > 22000, 0, in_experiment),
+         in_experiment = if_else(vb_tsmart_sd == 19 & in_experiment == 1 & id > 22000, 0, in_experiment))
+
+
 # check the people not in experiment to see if they share a household or phone with someone in the experiment
-florida_dat <- florida_dat %>%
-  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% florida_dat$vb_voterbase_phone[florida_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
-  mutate(phone_in_exp = if_else(HHID %in% florida_dat$HHID[florida_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
+colorado_dat <- colorado_dat %>%
+  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% colorado_dat$vb_voterbase_phone[colorado_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
+  mutate(phone_in_exp = if_else(HHID %in% colorado_dat$HHID[colorado_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
   mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
 
-# this is just a weird case where people in the same address are in different districts
-florida_dat <- florida_dat %>%
-  filter(vb_voterbase_id != "FL-16643367", 
-         vb_voterbase_id != "FL-18126731")
+table(colorado_dat$vb_tsmart_sd, colorado_dat$in_experiment)
 
-proportion_in_treatment <- .8
+proportion_in_treatment <- .6
 
-randomized_dat <- florida_dat %>%
+randomized_dat <- colorado_dat %>%
   filter(in_experiment==1) %>%
-  balance_randomization(block_vars = c("vb_tsmart_hd"), 
+  balance_randomization(block_vars = c("vb_tsmart_sd"), 
                         cluster_vars = "HHID",
                         n_treatment = 2,
                         two_arm_treat_prob = proportion_in_treatment,
@@ -259,9 +262,8 @@ randomized_dat <- florida_dat %>%
                                         "ts_tsmart_evangelical_raw_score",
                                         "ts_tsmart_otherchristian_raw_score",
                                         "ts_tsmart_prochoice_score",
-                                        "ts_tsmart_path_to_citizen_score",
-                                        "cate"),
-                        attempts = 50)
+                                        "ts_tsmart_path_to_citizen_score"),
+                        attempts = 50) 
 
 # check if clustering was succesful. this should return character(0)
 intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
@@ -269,46 +271,59 @@ intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
 
 
 randomized_dat %>% 
-  select(assignment, vb_tsmart_hd) %>%
+  select(assignment, vb_tsmart_sd) %>%
   table()
 
-district_target_counts <- data.frame(vb_tsmart_hd = c(58, 60, 65, 67, 115, 116, 118, 119),
-                                     target_goal = c(20000, 20000, 20000, 20000, 20000, 20000, 20000, 20000))
+district_target_counts <- data.frame(vb_tsmart_sd = c(16, 19, 25, 26),
+                                     target_goal = c(4000, 13000, 13000, 9000))
 
 
 # see how many more we need in each District
 counts_df <- randomized_dat %>%
   filter(assignment == "treatment") %>%
-  group_by(vb_tsmart_hd) %>%
+  group_by(vb_tsmart_sd) %>%
   summarise(targeted_in_experiment_so_far = n()) %>%
   ungroup() %>%
-  full_join(district_target_counts, by = "vb_tsmart_hd") %>%
+  full_join(district_target_counts, by = "vb_tsmart_sd") %>%
   mutate(more_needed = target_goal - targeted_in_experiment_so_far) %>%
   mutate(more_needed = if_else(more_needed > 0, more_needed, 0)) %>%
-  full_join(filter(florida_dat, in_exp_HH_or_phone==0) %>% 
-              group_by(vb_tsmart_hd) %>% 
+  full_join(filter(colorado_dat, in_exp_HH_or_phone==0) %>% 
+              group_by(vb_tsmart_sd) %>% 
               summarise(number_available_to_add = n()), 
-            by = "vb_tsmart_hd") %>%
+            by = "vb_tsmart_sd") %>%
   mutate(records_being_added = pmin(more_needed, number_available_to_add))
 
 # add the number of non experiment people needed in each district.
-randomized_dat <- florida_dat %>%
+randomized_dat <- colorado_dat %>%
   filter(in_exp_HH_or_phone==0) %>%
-  group_by(vb_tsmart_hd) %>% 
+  group_by(vb_tsmart_sd) %>% 
   nest() %>%            
   ungroup() %>% 
-  arrange(vb_tsmart_hd) %>%
-  left_join(counts_df, by = "vb_tsmart_hd") %>%
+  arrange(vb_tsmart_sd) %>%
+  left_join(counts_df, by = "vb_tsmart_sd") %>%
   mutate(samp = map2(data, records_being_added, sample_n)) %>% 
   unnest(samp) %>% 
   mutate(assignment = "not_in_experiment") %>%
   bind_rows(randomized_dat) %>%
-  select(-c(targeted_in_experiment_so_far, target_goal, more_needed, number_available_to_add, records_being_added))
+  select(-c(targeted_in_experiment_so_far, target_goal, more_needed, number_available_to_add, records_being_added)) 
+
+# if necessary subtract extras from treatment groups
+randomized_dat <- randomized_dat %>%
+  sample_n(size = nrow(.), replace = FALSE) %>%
+  mutate(get_treated = assignment != "control") %>%
+  group_by(vb_tsmart_sd, get_treated) %>%
+  mutate(id = row_number()) %>%
+  ungroup() %>%
+  filter(id <=13000 | get_treated == FALSE) %>%
+  select(-id)
+
 
 # check randomization and adding non-experiment people seems right
 table(randomized_dat$assignment, useNA = 'always')
-table(randomized_dat$vb_tsmart_hd, randomized_dat$assignment, useNA = 'always')
-table(randomized_dat$vb_tsmart_hd, randomized_dat$in_experiment, useNA = 'always')
+table(randomized_dat$assignment != "control", useNA = 'always')
+table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$vb_tsmart_sd, randomized_dat$assignment != "control", useNA = 'always')
+table(randomized_dat$vb_tsmart_sd, randomized_dat$in_experiment, useNA = 'always')
 table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
 
 # Data Checks -------------------------------------------------------------
@@ -331,7 +346,7 @@ randomized_dat %>%
   select(assignment, party) %>%
   table() %>%
   prop.table(margin = 1) %>%
-  round(digits = 2)
+  round(digits = 3)
 
 randomized_dat %>%
   filter(in_experiment == 1) %>%
@@ -343,8 +358,7 @@ randomized_dat %>%
 randomized_dat %>%
   filter(in_experiment == 1) %>%
   group_by(assignment) %>%
-  summarise(cate = mean(cate),
-            partisan = mean(ts_tsmart_partisan_score),
+  summarise(partisan = mean(ts_tsmart_partisan_score),
             ideology = mean(ts_tsmart_ideology_score, na.rm = T),
             os = mean(os_score, na.rm = T),
             am = mean(am_score, na.rm = T),
@@ -354,7 +368,7 @@ randomized_dat %>%
             citizenship = mean(ts_tsmart_path_to_citizen_score, na.rm = T),
             prochoice = mean(ts_tsmart_prochoice_score, na.rm = T))
 
-# Check that standard data issues are not present
+# Check that standard data issues are not present THESE SHOULD ALL BE TRUE
 length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
 sum(str_length(randomized_dat$vb_tsmart_first_name) == 1) == 0
 sum(randomized_dat$vb_voterbase_mailable_flag=="Yes") == nrow(randomized_dat)
@@ -367,16 +381,12 @@ randomized_dat %>%
   ggplot(aes(x=nm_score)) +
   geom_histogram()
 
-randomized_dat %>%
-  ggplot(aes(x=cate)) +
-  geom_histogram()
-
 # Save randomized results -------------------------------------------------
 # save full results as RDS
-saveRDS(randomized_dat, here("output", paste0("florida_randomized_dat", Sys.Date(), ".Rds")))
+saveRDS(randomized_dat, here("output", paste0("colorado_randomized_dat", Sys.Date(), ".Rds")))
 
 # save dataset for vendors as RDS and CSV
-florida_data_for_vendors <- randomized_dat %>%
+colorado_data_for_vendors <- randomized_dat %>%
   filter(assignment %in% c("not_in_experiment", "treatment")) %>%
   select(vb_voterbase_id,
          vb_voterid,
@@ -391,15 +401,31 @@ florida_data_for_vendors <- randomized_dat %>%
          vb_tsmart_zip,
          vb_tsmart_zip4,
          screened_phone,
+         screen_result,
          vb_voterbase_gender,
          vb_voterbase_dob,
          vb_voterbase_age,
+         vb_vf_party,
+         vb_education,
          voterbase_email,
-         assignment)
+         assignment,
+         vb_vf_g2020,
+         vb_vf_g2019,
+         vb_vf_g2018,
+         vb_vf_g2017,
+         vb_vf_g2016,
+         vb_vf_g2015,
+         vb_vf_g2014,
+         vb_vf_g2013,
+         vb_vf_g2012,
+         vb_vf_g2011,
+         vb_vf_g2010,
+         ts_tsmart_ideology_score,
+         HHID)
 
-saveRDS(florida_data_for_vendors, 
-        here("output", paste0("florida_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(florida_data_for_vendors, 
-          here("output", paste0("florida_data_for_vendors", Sys.Date(), ".csv")))
+saveRDS(colorado_data_for_vendors, 
+        here("output", paste0("colorado_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(colorado_data_for_vendors, 
+          here("output", paste0("colorado_data_for_vendors", Sys.Date(), ".csv")))
 
 
