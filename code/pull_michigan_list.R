@@ -184,7 +184,7 @@ raw_mi_dat %>%
   mutate(college = if_else(vb_education %in% c(3,4), 1, 0)) %>%
   saveRDS(here("output", "raw_michigan_dat.Rds"))
 
-raw_mi_dat <- readRDS(here("output", "raw_michigan_dat.RDS"))
+raw_mi_dat <- readRDS(here("output", "raw_michigan_dat.Rds"))
 
 michigan_dat <- raw_mi_dat %>%
   mutate(HHID = paste(vb_tsmart_full_address, vb_tsmart_city)) %>%
