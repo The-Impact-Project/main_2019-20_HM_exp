@@ -373,7 +373,7 @@ nevada_data_for_vendors <- randomized_dat %>%
   filter(assignment %in% c("not_in_experiment", "treatment")) %>%
   select(vb_voterbase_id,
          vb_voterid,
-         vb_tsmart_hd,
+         combined_districts,
          vb_tsmart_first_name,
          vb_tsmart_middle_name,
          vb_tsmart_last_name,
@@ -389,7 +389,8 @@ nevada_data_for_vendors <- randomized_dat %>%
          vb_voterbase_age,
          voterbase_email,
          assignment,
-         screen_result)
+         screen_result,
+         HHID)
 
 saveRDS(nevada_data_for_vendors, 
         here("output", paste0("nevada_data_for_vendors", Sys.Date(), ".Rds")))
