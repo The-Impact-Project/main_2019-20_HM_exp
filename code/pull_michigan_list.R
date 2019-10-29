@@ -232,6 +232,7 @@ michigan_dat <- michigan_dat %>%
   mutate(phone_in_exp = if_else(HHID %in% michigan_dat$HHID[michigan_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
   mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
 
+# limit who is in experiment in smaller districts
 michigan_dat <- michigan_dat %>%
   group_by(vb_tsmart_hd, in_experiment) %>%
   mutate(id = row_number()) %>%
