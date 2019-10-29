@@ -212,3 +212,169 @@ pennsylvania_dat %>%
   unique() %>%
   write_csv(here("output", paste0("pennsylvania_numbers_for_screen_", Sys.Date(), ".csv")))
 
+# Load and rematch phone screen results -----------------------------------
+screen_dat <- read_csv(here("data", "TMC-PA-Screen.csv")) %>%
+  select(result, number) %>%
+  rename(screen_result = "result") %>%
+  rename(vb_voterbase_phone = "number") %>%
+  mutate(passed_phone_screen = fct_collapse(screen_result,
+                                            good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
+                                            bad_number = c("Fast Busy", "FAX", "Operator", "Problem", "Route Unavailable")))
+
+pennsylvania_dat <- pennsylvania_dat %>%
+  left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment)) %>%
+  mutate(screened_phone = ifelse(passed_phone_screen == "good_number", vb_voterbase_phone, NA))
+
+# check the people not in experiment to see if they share a household or phone with someone in the experiment
+pennsylvania_dat <- pennsylvania_dat %>%
+  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% pennsylvania_dat$vb_voterbase_phone[pennsylvania_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
+  mutate(phone_in_exp = if_else(HHID %in% pennsylvania_dat$HHID[pennsylvania_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
+  mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
+
+table(pennsylvania_dat$vb_tsmart_hd, pennsylvania_dat$in_experiment)
+
+# limit who is in experiment because we have more than we need, so cut out people without ticketsplitter scores
+pennsylvania_dat <- pennsylvania_dat %>%
+  add_count(vb_voterbase_id) %>%
+  filter(n==1) %>%
+  mutate(priority = coalesce(catalistmodel_ticket_splitter, as.integer(0))) %>%
+  group_by(vb_tsmart_hd, in_experiment) %>%
+  arrange(desc(priority)) %>% 
+  mutate(id = row_number()) %>%
+  ungroup %>%
+  filter(id <= 11667) %>%
+  filter(id <= 2083 | vb_tsmart_hd %in% c(29, 105, 131, 144, 168, 178)) %>%
+  select(-id) %>%
+  select(-c(n, priority))
+  
+table(pennsylvania_dat$vb_tsmart_hd, pennsylvania_dat$in_experiment)
+
+proportion_in_treatment <- 0.6  
+
+randomized_dat <- pennsylvania_dat %>%
+  filter(in_experiment==1) %>%
+  balance_randomization(block_vars = c("vb_tsmart_hd"), 
+                        cluster_vars = "HHID",
+                        n_treatment = 2,
+                        two_arm_treat_prob = proportion_in_treatment,
+                        balance_vars =c("os_score",
+                                        "am_score",
+                                        "ts_tsmart_offyear_general_turnout_score",
+                                        "ts_tsmart_evangelical_raw_score",
+                                        "ts_tsmart_otherchristian_raw_score",
+                                        "ts_tsmart_prochoice_score",
+                                        "ts_tsmart_path_to_citizen_score"),
+                        attempts = 50) 
+
+# check if clustering was succesful. this should return character(0)
+intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
+          randomized_dat$HHID[randomized_dat$assignment=="treatment"])
+
+randomized_dat %>% 
+  select(assignment, vb_tsmart_hd) %>%
+  table()
+
+# check randomization and adding non-experiment people seems right
+table(randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$assignment != "control", useNA = 'always')
+table(randomized_dat$vb_tsmart_hd, randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$vb_tsmart_hd, randomized_dat$in_experiment, useNA = 'always')
+table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
+
+
+# Data Checks -------------------------------------------------------------
+# Check that balance was correct
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_voterbase_gender) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, college) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  mutate(party = fct_lump(vb_vf_party)) %>%
+  select(assignment, party) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 3)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_education) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 2)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  group_by(assignment) %>%
+  summarise(partisan = mean(ts_tsmart_partisan_score),
+            ideology = mean(ts_tsmart_ideology_score, na.rm = T),
+            os = mean(os_score, na.rm = T),
+            am = mean(am_score, na.rm = T),
+            turnout = mean(ts_tsmart_offyear_general_turnout_score),
+            evangelical = mean(ts_tsmart_evangelical_raw_score, na.rm = T),
+            otherchristian = mean(ts_tsmart_otherchristian_raw_score, na.rm = T),
+            citizenship = mean(ts_tsmart_path_to_citizen_score, na.rm = T),
+            prochoice = mean(ts_tsmart_prochoice_score, na.rm = T,),
+            ticketsplitter = mean(catalistmodel_ticket_splitter, na.rm=T),
+            missing_ticketsplitter = mean(is.na(catalistmodel_ticket_splitter)))
+
+
+# Check that standard data issues are not present
+length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
+sum(str_length(randomized_dat$vb_tsmart_first_name) == 1) == 0
+sum(randomized_dat$vb_voterbase_mailable_flag=="Yes") == nrow(randomized_dat)
+
+randomized_dat %>%
+  ggplot(aes(x=ts_tsmart_presidential_general_turnout_score)) +
+  geom_histogram()
+
+randomized_dat %>%
+  ggplot(aes(x=nm_score)) +
+  geom_histogram()
+
+randomized_dat %>%
+  ggplot(aes(x=catalistmodel_ticket_splitter)) +
+  geom_histogram()
+
+
+# Save randomized results -------------------------------------------------
+# save full results as RDS
+saveRDS(randomized_dat, here("output", paste0("pennsylvania_randomized_dat", Sys.Date(), ".Rds")))
+
+# save dataset for vendors as RDS and CSV
+pennsylvania_data_for_vendors <- randomized_dat %>%
+  filter(assignment %in% c("not_in_experiment", "treatment")) %>%
+  select(vb_voterbase_id,
+         vb_voterid,
+         vb_tsmart_hd,
+         vb_tsmart_first_name,
+         vb_tsmart_middle_name,
+         vb_tsmart_last_name,
+         vb_tsmart_name_suffix,
+         vb_tsmart_full_address,
+         vb_tsmart_city,
+         vb_tsmart_state,
+         vb_tsmart_zip,
+         vb_tsmart_zip4,
+         screened_phone,
+         vb_voterbase_gender,
+         vb_voterbase_dob,
+         vb_voterbase_age,
+         voterbase_email,
+         assignment,
+         screen_result)
+
+saveRDS(pennsylvania_data_for_vendors, 
+        here("output", paste0("pennsylvania_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(pennsylvania_data_for_vendors, 
+          here("output", paste0("pennsylvania_data_for_vendors", Sys.Date(), ".csv")))
+
