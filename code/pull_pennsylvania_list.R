@@ -378,3 +378,10 @@ saveRDS(pennsylvania_data_for_vendors,
 write_csv(pennsylvania_data_for_vendors, 
           here("output", paste0("pennsylvania_data_for_vendors", Sys.Date(), ".csv")))
 
+randomized_dat %>%
+  filter(assignment != "control" & !is.na(assignment)) %>%
+  mutate(vb_voterbase_deceased_flag = NA) %>%
+  TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
+                              output_title = "Pennsylvania HM Audience",
+                              refresh_list = FALSE,
+                              district_cross = "hd")
