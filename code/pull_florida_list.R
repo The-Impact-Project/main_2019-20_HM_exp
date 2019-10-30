@@ -220,7 +220,7 @@ florida_dat %>%
 
 
 # Load and rematch phone screen results -----------------------------------
-screen_dat <- read_csv(here("data", "1018-FL-Impact-Project-Screen.csv")) %>%
+screen_dat <- read_csv(here("data", "TMC-FL-Screen.csv")) %>%
   select(result, number) %>%
   rename(screen_result = "result") %>%
   rename(vb_voterbase_phone = "number") %>%
