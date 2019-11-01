@@ -197,13 +197,13 @@ arizona_dat <- raw_az_dat %>%
   filter(household_size < 7) %>%
   filter(vb_voterbase_mailable_flag == "Yes") %>%
   filter(str_length(vb_tsmart_first_name) > 1) %>%
-  filter((!is.na(catalistmodel_ticket_splitter)) | nm_score >32) %>% #################
+  filter((!is.na(catalistmodel_ticket_splitter)) | nm_score >32.5) %>% #################
   add_count(vb_tsmart_full_address, name = "targets_in_hh") %>%
   mutate(in_experiment = 1) %>%
   mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
   mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
-  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment))
-
+  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment)) %>%
+  filter(vb_tsmart_hd != 27) # messed up and we don't have ticketsplitter for these folks yet.
 
 # Output for Phone Screen -------------------------------------------------
 arizona_dat %>%
