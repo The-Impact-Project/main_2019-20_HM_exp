@@ -390,7 +390,7 @@ colorado_data_for_vendors <- randomized_dat %>%
   filter(assignment %in% c("not_in_experiment", "treatment")) %>%
   select(vb_voterbase_id,
          vb_voterid,
-         vb_tsmart_hd,
+         vb_tsmart_sd,
          vb_tsmart_first_name,
          vb_tsmart_middle_name,
          vb_tsmart_last_name,
