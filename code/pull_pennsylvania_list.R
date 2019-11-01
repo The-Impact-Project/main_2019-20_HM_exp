@@ -378,6 +378,7 @@ saveRDS(pennsylvania_data_for_vendors,
 write_csv(pennsylvania_data_for_vendors, 
           here("output", paste0("pennsylvania_data_for_vendors", Sys.Date(), ".csv")))
 
+# create audience_report
 randomized_dat %>%
   filter(assignment != "control" & !is.na(assignment)) %>%
   mutate(vb_voterbase_deceased_flag = NA) %>%

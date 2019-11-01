@@ -418,3 +418,11 @@ householded <- florida_data_for_vendors %>%
   select(-c(HHID, cate, rownum)) %>%
   write_csv(here("output", paste0("florida_householded_data_for_vendors", Sys.Date(), ".csv")))
   
+# create audience_report
+randomized_dat %>%
+  filter(assignment != "control") %>%
+  mutate(vb_voterbase_deceased_flag = NA) %>%
+  TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
+                              output_title = "Florida HM Audience",
+                              refresh_list = FALSE,
+                              district_cross = "hd")
