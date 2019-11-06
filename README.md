@@ -65,3 +65,6 @@ This is not in the repo but can be found in each states folder in the experiment
 - `[STATE]_numbers_for_screen_[DATE].csv` are the list of phone numbers sent to AMM to screen
 - `[STATE]_randomzied_dat[DATE].Rds` are the full list of randomized people for the experiments
 - `raw_[STATE]_dat.Rds` is the list after it was pulled from the voter file but before it was screeneed or randomized
+
+## Notes
+ - We did not order ticketsplitter data for AZ leg. district 27 until after the rest of the data was recieved from Catalist. Therefore, that ticketsplitter data is in a separate table, and that district was dropped from the experiment. We are still targeting 5,000 people in that district, but they are not phone screened and they are ALL "not in experiment."
