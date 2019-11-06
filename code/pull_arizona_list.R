@@ -211,3 +211,216 @@ arizona_dat %>%
   select(vb_voterbase_phone) %>%
   unique() %>%
   write_csv(here("output", paste0("arizona_numbers_for_screen_", Sys.Date(), ".csv")))
+
+# Load and rematch phone screen results -----------------------------------
+screen_dat <- read_csv(here("data", "TMC-AZ-Screen.csv")) %>%
+  select(result, number) %>%
+  rename(screen_result = "result") %>%
+  rename(vb_voterbase_phone = "number") %>%
+  mutate(passed_phone_screen = fct_collapse(screen_result,
+                                            good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
+                                            bad_number = c("Fast Busy", "FAX", "Operator", "Problem", "Route Unavailable")))
+
+arizona_dat <- arizona_dat %>%
+  left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
+  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment)) %>%
+  mutate(screened_phone = ifelse(passed_phone_screen == "good_number", vb_voterbase_phone, NA))
+
+# check the people not in experiment to see if they share a household or phone with someone in the experiment
+arizona_dat <- arizona_dat %>%
+  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% arizona_dat$vb_voterbase_phone[arizona_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
+  mutate(phone_in_exp = if_else(HHID %in% arizona_dat$HHID[arizona_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
+  mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
+
+table(arizona_dat$vb_tsmart_hd, arizona_dat$in_experiment)
+
+# limit who is in experiment because we have more than we need, so cut out people without ticketsplitter scores
+arizona_dat <- arizona_dat %>%
+  add_count(vb_voterbase_id) %>%
+  filter(n==1) %>%
+  mutate(priority = coalesce(catalistmodel_ticket_splitter, as.integer(0))) %>%
+  group_by(vb_tsmart_hd, in_experiment) %>%
+  arrange(desc(priority)) %>% 
+  mutate(id = row_number()) %>%
+  ungroup %>%
+  filter((id <= 16500 & vb_tsmart_hd == 6)
+         | (id <= 24000 & vb_tsmart_hd == 17)
+         | (id <= 30000 & vb_tsmart_hd == 20)
+         | (id <= 24000 & vb_tsmart_hd == 28)
+         | (id <= 7500 & vb_tsmart_hd == 29)) %>%
+  select(-id) %>%
+  select(-c(n, priority))
+
+table(arizona_dat$vb_tsmart_hd, arizona_dat$in_experiment)
+
+proportion_in_treatment <- 0.6666
+
+randomized_dat <- arizona_dat %>%
+  filter(in_experiment==1) %>%
+  balance_randomization(block_vars = c("vb_tsmart_hd"), 
+                        cluster_vars = "HHID",
+                        n_treatment = 2,
+                        two_arm_treat_prob = proportion_in_treatment,
+                        balance_vars =c("os_score",
+                                        "am_score",
+                                        "ts_tsmart_offyear_general_turnout_score",
+                                        "ts_tsmart_evangelical_raw_score",
+                                        "ts_tsmart_otherchristian_raw_score",
+                                        "ts_tsmart_prochoice_score",
+                                        "ts_tsmart_path_to_citizen_score"),
+                        attempts = 50) 
+
+# check if clustering was succesful. this should return character(0)
+intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
+          randomized_dat$HHID[randomized_dat$assignment=="treatment"])
+
+randomized_dat %>% 
+  select(assignment, vb_tsmart_hd) %>%
+  table()
+
+
+district_target_counts <- data.frame(vb_tsmart_hd = c(6, 17, 20, 28, 29),
+                                     target_goal = c(11000, 16000, 20000, 16000, 5000))
+
+
+# see how many more we need in each District
+counts_df <- randomized_dat %>%
+  filter(assignment == "treatment") %>%
+  group_by(vb_tsmart_hd) %>%
+  summarise(targeted_in_experiment_so_far = n()) %>%
+  ungroup() %>%
+  full_join(district_target_counts, by = "vb_tsmart_hd") %>%
+  mutate(more_needed = target_goal - targeted_in_experiment_so_far) %>%
+  mutate(more_needed = if_else(more_needed > 0, more_needed, 0)) %>%
+  full_join(filter(arizona_dat, in_exp_HH_or_phone==0) %>% 
+              group_by(vb_tsmart_hd) %>% 
+              summarise(number_available_to_add = n()), 
+            by = "vb_tsmart_hd") %>%
+  mutate(records_being_added = pmin(more_needed, number_available_to_add))
+
+# add the number of non experiment people needed in each district.
+randomized_dat <- arizona_dat %>%
+  filter(in_exp_HH_or_phone==0) %>%
+  group_by(vb_tsmart_hd) %>% 
+  nest() %>%            
+  ungroup() %>% 
+  arrange(vb_tsmart_hd) %>%
+  left_join(counts_df, by = "vb_tsmart_hd") %>%
+  mutate(samp = map2(data, records_being_added, sample_n)) %>% 
+  unnest(samp) %>% 
+  mutate(assignment = "not_in_experiment") %>%
+  bind_rows(randomized_dat) %>%
+  select(-c(targeted_in_experiment_so_far, target_goal, more_needed, number_available_to_add, records_being_added))
+
+# check randomization and adding non-experiment people seems right
+table(randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$assignment != "control", useNA = 'always')
+table(randomized_dat$assignment != "control", randomized_dat$vb_tsmart_hd, useNA = 'always')
+table(randomized_dat$vb_tsmart_hd, randomized_dat$assignment, useNA = 'always')
+table(randomized_dat$vb_tsmart_hd, randomized_dat$in_experiment, useNA = 'always')
+table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
+
+# Data Checks -------------------------------------------------------------
+# Check that balance was correct
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_voterbase_gender) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, college) %>%
+  table() %>%
+  prop.table(margin = 1)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  mutate(party = fct_lump(vb_vf_party)) %>%
+  select(assignment, party) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 3)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  select(assignment, vb_education) %>%
+  table() %>%
+  prop.table(margin = 1) %>%
+  round(digits = 2)
+
+randomized_dat %>%
+  filter(in_experiment == 1) %>%
+  group_by(assignment) %>%
+  summarise(partisan = mean(ts_tsmart_partisan_score),
+            ideology = mean(ts_tsmart_ideology_score, na.rm = T),
+            os = mean(os_score, na.rm = T),
+            am = mean(am_score, na.rm = T),
+            turnout = mean(ts_tsmart_offyear_general_turnout_score),
+            evangelical = mean(ts_tsmart_evangelical_raw_score, na.rm = T),
+            otherchristian = mean(ts_tsmart_otherchristian_raw_score, na.rm = T),
+            citizenship = mean(ts_tsmart_path_to_citizen_score, na.rm = T),
+            prochoice = mean(ts_tsmart_prochoice_score, na.rm = T,),
+            ticketsplitter = mean(catalistmodel_ticket_splitter, na.rm=T),
+            missing_ticketsplitter = mean(is.na(catalistmodel_ticket_splitter)))
+
+
+# Check that standard data issues are not present
+length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
+sum(str_length(randomized_dat$vb_tsmart_first_name) == 1) == 0
+sum(randomized_dat$vb_voterbase_mailable_flag=="Yes") == nrow(randomized_dat)
+
+randomized_dat %>%
+  ggplot(aes(x=ts_tsmart_presidential_general_turnout_score)) +
+  geom_histogram()
+
+randomized_dat %>%
+  ggplot(aes(x=nm_score)) +
+  geom_histogram()
+
+randomized_dat %>%
+  ggplot(aes(x=catalistmodel_ticket_splitter)) +
+  geom_histogram()
+
+
+
+# Save randomized results -------------------------------------------------
+# save full results as RDS
+saveRDS(randomized_dat, here("output", paste0("arizona_randomized_dat", Sys.Date(), ".Rds")))
+
+# save dataset for vendors as RDS and CSV
+arizona_data_for_vendors <- randomized_dat %>%
+  filter(assignment %in% c("not_in_experiment", "treatment")) %>%
+  select(vb_voterbase_id,
+         vb_voterid,
+         vb_tsmart_hd,
+         vb_tsmart_first_name,
+         vb_tsmart_middle_name,
+         vb_tsmart_last_name,
+         vb_tsmart_name_suffix,
+         vb_tsmart_full_address,
+         vb_tsmart_city,
+         vb_tsmart_state,
+         vb_tsmart_zip,
+         vb_tsmart_zip4,
+         screened_phone,
+         vb_voterbase_gender,
+         vb_voterbase_dob,
+         vb_voterbase_age,
+         voterbase_email,
+         assignment,
+         screen_result)
+
+saveRDS(arizona_data_for_vendors, 
+        here("output", paste0("arizona_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(arizona_data_for_vendors, 
+          here("output", paste0("arizona_data_for_vendors", Sys.Date(), ".csv")))
+
+# create audience_report
+randomized_dat %>%
+  filter(assignment != "control" & !is.na(assignment)) %>%
+  mutate(vb_voterbase_deceased_flag = NA) %>%
+  TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
+                              output_title = "Arizona HM Audience",
+                              refresh_list = FALSE,
+                              district_cross = "hd")
