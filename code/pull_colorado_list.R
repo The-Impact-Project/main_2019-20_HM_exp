@@ -428,11 +428,66 @@ saveRDS(colorado_data_for_vendors,
 write_csv(colorado_data_for_vendors, 
           here("output", paste0("colorado_data_for_vendors", Sys.Date(), ".csv")))
 
+# make householded list
+householded <- randomized_dat %>%
+  filter(assignment %in% c("treatment", "not_in_experiment")) %>%
+  group_by(HHID) %>%
+  mutate(rownum = row_number()) %>%
+  ungroup() %>%
+  filter(rownum == 1) %>%
+  select(-rownum)
+
+householded %>%
+  select(vb_voterbase_id,
+         vb_voterid,
+         vb_tsmart_sd,
+         vb_tsmart_first_name,
+         vb_tsmart_middle_name,
+         vb_tsmart_last_name,
+         vb_tsmart_name_suffix,
+         vb_tsmart_full_address,
+         vb_tsmart_city,
+         vb_tsmart_state,
+         vb_tsmart_zip,
+         vb_tsmart_zip4,
+         screened_phone,
+         screen_result,
+         vb_voterbase_gender,
+         vb_voterbase_dob,
+         vb_voterbase_age,
+         vb_vf_party,
+         vb_education,
+         voterbase_email,
+         assignment,
+         vb_vf_g2020,
+         vb_vf_g2019,
+         vb_vf_g2018,
+         vb_vf_g2017,
+         vb_vf_g2016,
+         vb_vf_g2015,
+         vb_vf_g2014,
+         vb_vf_g2013,
+         vb_vf_g2012,
+         vb_vf_g2011,
+         vb_vf_g2010,
+         ts_tsmart_ideology_score,
+         HHID) %>%
+  write_csv(here("output", paste0("colorado_householded_data_for_vendors", Sys.Date(), ".csv")))
+
 # create audience_report
 randomized_dat %>%
   filter(assignment != "control") %>%
   mutate(vb_voterbase_deceased_flag = NA) %>%
   TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
                               output_title = "Colorado HM Audience",
+                              refresh_list = FALSE,
+                              district_cross = "sd")
+
+# create householded audience report
+householded %>%
+  filter(assignment != "control") %>%
+  mutate(vb_voterbase_deceased_flag = NA) %>%
+  TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
+                              output_title = "Householded Colorado HM Audience",
                               refresh_list = FALSE,
                               district_cross = "sd")
