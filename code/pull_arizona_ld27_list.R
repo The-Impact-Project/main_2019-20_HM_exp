@@ -95,3 +95,10 @@ saveRDS(arizona_data_for_vendors,
 write_csv(arizona_data_for_vendors, 
           here("output", paste0("arizona_ld27_data_for_vendors", Sys.Date(), ".csv")))
 
+# create audience_report
+arizona_dat %>%
+  mutate(vb_voterbase_deceased_flag = NA) %>%
+  TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
+                              output_title = "Arizona LD27 HM Audience",
+                              refresh_list = FALSE,
+                              district_cross = "hd")
