@@ -58,6 +58,8 @@ all <- bind_rows(az,
                  mi,
                  nv,
                  pa)
+all %>%
+  saveRDS(here("output", "all_randomized_dat.Rds"))
 
 state_goals <- tibble(vb_tsmart_state = c("AZ", "CO", "FL", "ME", "MI", "NV", "PA"),
                       goal = c(2000, 1500, 1500, 875, 2000, 1500, 1500)) %>%
