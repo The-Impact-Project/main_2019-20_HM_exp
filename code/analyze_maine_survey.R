@@ -4,6 +4,8 @@ library(tidyverse)
 library(civis)
 library(here)
 
+maine_dems <- c(14)
+
 amm_results <- read_csv(here("data", "TMC_ME_Return_1122_1124.csv")) %>%
   filter(FDISP=="01") %>%
   as_tibble() %>%
@@ -29,15 +31,13 @@ survey_results <- amm_results %>%
          Qfav_modifier = recode(as.character(Q4),
                        "1" = "Strongly",
                        "2" = "Somewhat",
-                       "8888" = "Slightly"),
+                       "8888" = "Somewhat"),
          Qfav = as_factor(str_remove(string = paste(Qfav_modifier, Qfav_binary), pattern = "NA ")),
          Qfav = fct_relevel(Qfav, 
                             "Strongly Favorable",
                             "Somewhat Favorable",
-                            "Slightly Favorable",
                             "Never Heard",
                             "Don't Know",
-                            "Slightly Unfavorable",
                             "Somewhat Unfavorable",
                             "Strongly Unfavorable"),
          Qmaine_issue = recode(as.character(Q5),
@@ -62,6 +62,13 @@ survey_results <- amm_results %>%
          Qmaine_issue = factor(Qmaine_issue, levels = c("Strongly Support", "Somewhat Support", "Don't Know", "Somewhat Oppose", "Strongly Oppose")),
          Qapproach = factor(Qapproach, levels = c("Investing in schools", "Both", "Don't Know", "Something Else", "Keeping taxes low")),
          Qrecall = factor(Qrecall, levels = c("Yes", "Don't Know", "No"))) %>%
+  mutate(Qfav_flipped = if_else(!vb_tsmart_sd %in% maine_dems,
+                                fct_recode(Qfav,
+                                          `Strongly Favorable` = "Strongly Unfavorable",
+                                          `Somewhat Favorable` = "Somewhat Unfavorable",
+                                          `Strongly Unfavorable` = "Strongly Favorable",
+                                          `Somewhat Unfavorable` = "Somewhat Favorable"),
+                                Qfav)) %>%
   weight_data(universe_dataset = randomized_dat,
               max_weight = 3,
               assignment,
@@ -70,7 +77,24 @@ survey_results <- amm_results %>%
               vb_voterbase_gender)
 
 # make graphs
-
+survey_results %>%
+  group_by(assignment, Qfav_flipped) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, fill=Qfav_flipped, y = freq)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#f1b6da",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#b8e186",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank())
+  
 
 
 
