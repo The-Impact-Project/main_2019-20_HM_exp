@@ -60,7 +60,7 @@ survey_results <- amm_results %>%
   filter(Q8 > 5000 | abs(year_difference < 3)) %>%
   mutate(Qgender = factor(Qgender),
          Qmaine_issue = factor(Qmaine_issue, levels = c("Strongly Support", "Somewhat Support", "Don't Know", "Somewhat Oppose", "Strongly Oppose")),
-         Qapproach = factor(Qapproach, levels = c("Investing in schools", "Both", "Don't Know", "Something Else", "Keeping taxes low")),
+         Qapproach = factor(Qapproach, levels = c("Investing in schools", "Both", "Don't Know", "Something else", "Keeping taxes low")),
          Qrecall = factor(Qrecall, levels = c("Yes", "Don't Know", "No"))) %>%
   mutate(Qfav_flipped = if_else(!vb_tsmart_sd %in% maine_dems,
                                 fct_recode(Qfav,
@@ -74,7 +74,8 @@ survey_results <- amm_results %>%
               assignment,
               college,
               maine_ticket_splitter,
-              vb_voterbase_gender)
+              vb_voterbase_gender) %>%
+  select(-c(Qfav_binary, Qfav_modifier))
 
 # make graphs
 survey_results %>%
@@ -95,7 +96,56 @@ survey_results %>%
   theme(legend.position="top",
         legend.title = element_blank())
   
+survey_results %>%
+  group_by(assignment, Qmaine_issue) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, fill=Qmaine_issue, y = freq)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#f1b6da",
+                               "#bababa",
+                               "#b8e186",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank())
 
+survey_results %>%
+  mutate(Qapproach = fct_recode(Qapproach,
+                                `Both/Don't Know/Something Else` = "Both",
+                                `Both/Don't Know/Something Else` = "Don't Know",
+                                `Both/Don't Know/Something Else` = "Something else")) %>%
+  group_by(assignment, Qapproach) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, fill=Qapproach, y = freq)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#bababa",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank())
+
+survey_results %>%
+  group_by(assignment, Qrecall) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, fill=Qrecall, y = freq)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#bababa",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank())
 
 
 
