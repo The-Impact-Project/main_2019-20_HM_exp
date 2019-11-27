@@ -147,6 +147,32 @@ survey_results %>%
   theme(legend.position="top",
         legend.title = element_blank())
 
+# Regressions
+survey_results %>%
+  mutate(Qfav_binary = if_else(grepl(pattern = " Favorable", Qfav_flipped), 1, 0)) %>%
+  select(Qfav_binary, assignment, vb_voterbase_gender, vb_tsmart_sd, college, maine_ticket_splitter) %>% 
+  glm(formula = Qfav_binary~., family = "binomial") %>%
+  summary()
+
+survey_results %>%
+  mutate(approach = if_else(Qapproach=="Investing in schools", 1, 0)) %>%
+  select(approach, assignment, vb_voterbase_gender, vb_tsmart_sd, college, maine_ticket_splitter) %>% 
+  glm(formula = approach~., 
+      family = "binomial") %>%
+  summary()
+
+survey_results %>%
+  mutate(maine_issue = if_else(grepl(pattern = " Support", Qmaine_issue), 1, 0)) %>%
+  select(maine_issue, assignment, vb_voterbase_gender, vb_tsmart_sd, college, maine_ticket_splitter) %>% 
+  glm(formula = maine_issue~., family = "binomial") %>%
+  summary()
+
+survey_results %>%
+  mutate(recall = if_else(Qrecall == "Yes", 1, 0)) %>%
+  select(recall, assignment, vb_voterbase_gender, vb_tsmart_sd, college, maine_ticket_splitter) %>% 
+  glm(formula = recall~., family = "binomial") %>%
+  summary()
+
 
 
   
