@@ -94,7 +94,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
   
 survey_results %>%
   group_by(assignment, Qmaine_issue) %>%
@@ -111,7 +116,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 
 survey_results %>%
   mutate(Qapproach = fct_recode(Qapproach,
@@ -130,7 +140,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 
 survey_results %>%
   group_by(assignment, Qrecall) %>%
@@ -145,7 +160,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 
 # Regressions
 survey_results %>%
