@@ -36,21 +36,6 @@ pa <- readRDS(here("output", "pennsylvania_randomized_dat2019-10-29.Rds")) %>%
   mutate(cate = NA,
          maine_ticket_splitter = NA)
 
-
-setdiff(names(co),  names(az))
-setdiff(names(fl),  names(az))
-setdiff(names(me),  names(az))
-setdiff(names(mi),  names(az))
-setdiff(names(nv),  names(az))
-setdiff(names(pa),  names(az))
-
-setdiff(names(az),  names(co))
-setdiff(names(az),  names(fl))
-setdiff(names(az),  names(me))
-setdiff(names(az),  names(mi))
-setdiff(names(az),  names(nv))
-setdiff(names(az),  names(pa))
-
 all <- bind_rows(az,
                  co,
                  fl,
@@ -58,6 +43,7 @@ all <- bind_rows(az,
                  mi,
                  nv,
                  pa)
+
 all %>%
   saveRDS(here("output", "all_randomized_dat.Rds"))
 
@@ -94,4 +80,34 @@ all %>%
          assignment,
          screen_result) %>%
   write_csv(here("output", "maine_list_for_AMM.csv"))
+
+all %>%
+  filter(assignment %in% c("control", "treatment")) %>% 
+  filter(!screened_phone %in% do_not_call$screened_phone) %>% 
+  filter(vb_tsmart_state == 'AZ') %>%
+  select(vb_voterbase_id,
+         screened_phone,
+         vb_tsmart_first_name,
+         vb_tsmart_last_name,
+         vb_tsmart_state,
+         vb_tsmart_sd,
+         vb_tsmart_hd,
+         assignment,
+         screen_result) %>%
+  write_csv(here("output", "arizona_list_for_AMM.csv"))
+
+all %>%
+  filter(assignment %in% c("control", "treatment")) %>% 
+  filter(!screened_phone %in% do_not_call$screened_phone) %>% 
+  filter(vb_tsmart_state == 'FL') %>%
+  select(vb_voterbase_id,
+         screened_phone,
+         vb_tsmart_first_name,
+         vb_tsmart_last_name,
+         vb_tsmart_state,
+         vb_tsmart_sd,
+         vb_tsmart_hd,
+         assignment,
+         screen_result) %>%
+  write_csv(here("output", "florida_list_for_AMM.csv"))
 
