@@ -126,7 +126,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 ```
 
 Q5. Now I’d like to ask you to rate your personal feelings on an issue. The Maine state legislature recently passed a law to help ensure that men and women get paid the same amount for equal work. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose this law?
@@ -147,7 +152,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 ```
 
 Q6. Next, which approach do you think would be better for Maine’s government: 
@@ -173,7 +183,12 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 ```
 
 Q7. In the last several weeks, did you receive any mail about issues that the state legislature is working on in Maine?
@@ -192,6 +207,11 @@ survey_results %>%
   coord_flip() +
   theme_minimal() +
   theme(legend.position="top",
-        legend.title = element_blank())
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.05, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, 
+                                      reverse = TRUE))
 ```
 
