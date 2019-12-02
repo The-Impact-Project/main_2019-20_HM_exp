@@ -105,9 +105,9 @@ survey_results <- amm_results %>%
 
 For this question, I flipped the responses for people in the three districts where the State Senator is not with us on the issues. Therefore, we are always trying to push people _towards_ favorable.
 
-**Q3.** I’d like you to rate your feelings toward a public figure. Would you say you have a favorable or an unfavorable opinion of State Senator [Senator]? If you have no opinion or have never heard of [Senator], please just say so.
+**Q3 and Q4.** I’d like you to rate your feelings toward a public figure. Would you say you have a favorable or an unfavorable opinion of State Senator [Senator]? If you have no opinion or have never heard of [Senator], please just say so.
 
-**Q4.** And would you say you have a strongly [favorable/unfavorable] opinion of State Senator [Senator], or just a somewhat [favorable/unfavorable] opinion of [Senator]?
+And would you say you have a strongly [favorable/unfavorable] opinion of State Senator [Senator], or just a somewhat [favorable/unfavorable] opinion of [Senator]?
 
 ```{r fav, echo=FALSE, fig.height=2.5}
 survey_results %>%
@@ -131,7 +131,8 @@ survey_results %>%
                                 scales::percent(freq, accuracy = 1),
                                 "")), 
             position = position_stack(vjust = 0.5, 
-                                      reverse = TRUE))
+                                      reverse = TRUE)) +
+  labs(x = "", y = "")
 ```
 
 Q5. Now I’d like to ask you to rate your personal feelings on an issue. The Maine state legislature recently passed a law to help ensure that men and women get paid the same amount for equal work. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose this law?
@@ -157,7 +158,8 @@ survey_results %>%
                                 scales::percent(freq, accuracy = 1),
                                 "")), 
             position = position_stack(vjust = 0.5, 
-                                      reverse = TRUE))
+                                      reverse = TRUE)) +
+  labs(x = "", y = "")
 ```
 
 Q6. Next, which approach do you think would be better for Maine’s government: 
@@ -188,7 +190,8 @@ survey_results %>%
                                 scales::percent(freq, accuracy = 1),
                                 "")), 
             position = position_stack(vjust = 0.5, 
-                                      reverse = TRUE))
+                                      reverse = TRUE)) +
+  labs(x = "", y = "")
 ```
 
 Q7. In the last several weeks, did you receive any mail about issues that the state legislature is working on in Maine?
@@ -212,6 +215,7 @@ survey_results %>%
                                 scales::percent(freq, accuracy = 1),
                                 "")), 
             position = position_stack(vjust = 0.5, 
-                                      reverse = TRUE))
+                                      reverse = TRUE)) +
+  labs(x = "", y = "")
 ```
 
