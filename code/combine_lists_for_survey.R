@@ -111,3 +111,33 @@ all %>%
          screen_result) %>%
   write_csv(here("output", "florida_list_for_AMM.csv"))
 
+all %>%
+  filter(assignment %in% c("control", "treatment")) %>% 
+  filter(!screened_phone %in% do_not_call$screened_phone) %>% 
+  filter(vb_tsmart_state == 'CO') %>%
+  select(vb_voterbase_id,
+         screened_phone,
+         vb_tsmart_first_name,
+         vb_tsmart_last_name,
+         vb_tsmart_state,
+         vb_tsmart_sd,
+         vb_tsmart_hd,
+         assignment,
+         screen_result) %>%
+  write_csv(here("output", "colorado_list_for_AMM.csv"))
+
+all %>%
+  filter(assignment %in% c("control", "treatment")) %>% 
+  filter(!screened_phone %in% do_not_call$screened_phone) %>% 
+  filter(vb_tsmart_state == 'MI') %>%
+  select(vb_voterbase_id,
+         screened_phone,
+         vb_tsmart_first_name,
+         vb_tsmart_last_name,
+         vb_tsmart_state,
+         vb_tsmart_sd,
+         vb_tsmart_hd,
+         assignment,
+         screen_result) %>%
+  write_csv(here("output", "michigan_list_for_AMM.csv"))
+
