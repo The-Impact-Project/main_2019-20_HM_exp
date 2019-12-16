@@ -171,7 +171,7 @@ FROM impactproject.ticketsplitter_matching_nc_matched
   LEFT JOIN tmc.email_current ON ntl_current.vb_voterbase_id = email_current.voterbase_id
 WHERE ts_tsmart_presidential_general_turnout_score > 40
   AND vb_tsmart_state = 'NC'
-  -- AND vb_tsmart_hd IN ('082', '083', '098', '045', '053', '005')
+  -- AND vb_tsmart_hd IN ('082', '083', '098', '045', '053', '005') THIS LINE IS COMMENTED OUT. WAITING FOR NC TargetSmart table
   AND vb_voterbase_age > 17
   AND vb_voterbase_age < 100
   AND vb_voterbase_deceased_flag IS NULL" %>%
@@ -186,12 +186,13 @@ raw_nc_dat %>%
 
 raw_nc_dat <- readRDS(here("output", "raw_northcarolina_dat.Rds"))
 
-
-
-##################################
-# Everything below here is unedited
-##################################
-michigan_dat <- raw_mi_dat %>%
+northcarolina_dat <- raw_nc_dat %>%
+  group_by(vb_voterbase_id) %>%
+  arrange(-catalistmodel_ticket_splitter) %>%
+  mutate(person_id=row_number()) %>% 
+  ungroup() %>%
+  filter(person_id==1) %>%
+  select(-person_id) %>%
   mutate(HHID = paste(vb_tsmart_full_address, vb_tsmart_city)) %>%
   add_count(HHID, name = "household_size") %>% 
   add_count(vb_voterbase_phone, name = "vb_voterbase_phone_count") %>%
@@ -202,165 +203,32 @@ michigan_dat <- raw_mi_dat %>%
   filter(household_size < 7) %>%
   filter(vb_voterbase_mailable_flag == "Yes") %>%
   filter(str_length(vb_tsmart_first_name) > 1) %>%
-  filter((!is.na(catalistmodel_ticket_splitter)) | nm_score >28) %>%
-  add_count(vb_tsmart_full_address, name = "targets_in_hh") %>%
-  mutate(in_experiment = 1) %>%
-  mutate(in_experiment = if_else(is.na(vb_voterbase_phone), 0, in_experiment)) %>%
-  mutate(in_experiment = if_else(vb_voterbase_phone_count >= 10, 0, in_experiment)) %>%
-  mutate(in_experiment = if_else(vb_voterbase_phone_count > 3 & vb_voterbase_phone_type=="Wireless", 0, in_experiment))
+  filter(!is.na(catalistmodel_ticket_splitter)) %>%
+  add_count(vb_tsmart_full_address, name = "targets_in_hh")
 
+raw_nc_dat %>%
+  count(vb_tsmart_hd, sort = T)
+  
 
-# Output for Phone Screen -------------------------------------------------
-michigan_dat %>%
-  filter(in_experiment==1) %>%
-  select(vb_voterbase_phone) %>%
-  unique() %>% 
-  write_csv(here("output", paste0("michigan_numbers_for_screen_", Sys.Date(), ".csv")))
-
-# Load and rematch phone screen results -----------------------------------
-screen_dat <- read_csv(here("data", "TMC-MI-Screen.csv")) %>%
-  select(result, number) %>%
-  rename(screen_result = "result") %>%
-  rename(vb_voterbase_phone = "number") %>%
-  mutate(passed_phone_screen = fct_collapse(screen_result,
-                                            good_number = c("Answering Machine", "Busy", "Live Person", "No Answer", "Wireless"),
-                                            bad_number = c("Fast Busy", "FAX", "Operator", "Problem", "Route Unavailable")))
-
-michigan_dat <- michigan_dat %>%
-  left_join(y = screen_dat, by = "vb_voterbase_phone") %>%
-  mutate(in_experiment = if_else(passed_phone_screen %in% c("bad_number", NA), 0, in_experiment)) %>%
-  mutate(screened_phone = ifelse(passed_phone_screen == "good_number", vb_voterbase_phone, NA))
-
-# check the people not in experiment to see if they share a household or phone with someone in the experiment
-michigan_dat <- michigan_dat %>%
-  mutate(HH_in_exp = if_else(vb_voterbase_phone %in% michigan_dat$vb_voterbase_phone[michigan_dat$in_experiment==1], 1, 0)) %>% # doesn't share Address or phone with exp
-  mutate(phone_in_exp = if_else(HHID %in% michigan_dat$HHID[michigan_dat$in_experiment==1], 1, 0)) %>% # doesn't share phone with exp
-  mutate(in_exp_HH_or_phone = if_else(HH_in_exp==1, 1, if_else(phone_in_exp==1, 1, 0)))
+### I NEED TO MERGE IN TS SHAPEFILE DATA AND USE THAT TO FILTER ADDRESSES
 
 # limit who is in experiment in smaller districts
-michigan_dat <- michigan_dat %>%
-  group_by(vb_tsmart_hd, in_experiment) %>%
-  mutate(id = row_number()) %>%
-  ungroup %>%
-  mutate(in_experiment = if_else(vb_tsmart_hd %in% c(35, 42) & in_experiment==1 & id > 2730, 0, in_experiment)) %>%
-  select(-id) %>%
-  add_count(vb_voterbase_id) %>%
-  filter(n==1) %>%
-  select(-n)
-
-proportion_in_treatment <- 0.55
-
-randomized_dat <- michigan_dat %>%
-  filter(in_experiment==1) %>%
-  balance_randomization(block_vars = c("vb_tsmart_hd"), 
-                        cluster_vars = "HHID",
-                        n_treatment = 2,
-                        two_arm_treat_prob = proportion_in_treatment,
-                        balance_vars =c("os_score",
-                                        "am_score",
-                                        "ts_tsmart_offyear_general_turnout_score",
-                                        "ts_tsmart_evangelical_raw_score",
-                                        "ts_tsmart_otherchristian_raw_score",
-                                        "ts_tsmart_prochoice_score",
-                                        "ts_tsmart_path_to_citizen_score"),
-                        attempts = 50)
-
-# check if clustering was succesful. this should return character(0)
-intersect(randomized_dat$HHID[randomized_dat$assignment=="control"],
-          randomized_dat$HHID[randomized_dat$assignment=="treatment"])
-
-randomized_dat %>% 
-  select(assignment, vb_tsmart_hd) %>%
-  table()
-
-district_target_counts <- data.frame(vb_tsmart_hd = c(19, 35, 39, 42, 71, 110),
-                                     target_goal = c(11000, 1500, 11000, 1500, 11000, 11000))
-
-# see how many more we need in each District
-counts_df <- randomized_dat %>%
-  filter(assignment == "treatment") %>%
+northcarolina_dat <- northcarolina_dat %>%
   group_by(vb_tsmart_hd) %>%
-  summarise(targeted_in_experiment_so_far = n()) %>%
-  ungroup() %>%
-  full_join(district_target_counts, by = "vb_tsmart_hd") %>%
-  mutate(more_needed = target_goal - targeted_in_experiment_so_far) %>%
-  mutate(more_needed = if_else(more_needed > 0, more_needed, 0)) %>%
-  full_join(filter(michigan_dat, in_exp_HH_or_phone==0) %>% 
-              group_by(vb_tsmart_hd) %>% 
-              summarise(number_available_to_add = n()), 
-            by = "vb_tsmart_hd") %>%
-  mutate(records_being_added = pmin(more_needed, number_available_to_add))
-
-# add the number of non experiment people needed in each district.
-randomized_dat <- michigan_dat %>%
-  filter(in_exp_HH_or_phone==0) %>%
-  group_by(vb_tsmart_hd) %>% 
-  nest() %>%            
-  ungroup() %>% 
-  arrange(vb_tsmart_hd) %>%
-  left_join(counts_df, by = "vb_tsmart_hd") %>%
-  mutate(samp = map2(data, records_being_added, sample_n)) %>% 
-  unnest(samp) %>% 
-  mutate(assignment = "not_in_experiment") %>%
-  bind_rows(randomized_dat) %>%
-  select(-c(targeted_in_experiment_so_far, target_goal, more_needed, number_available_to_add, records_being_added))
-
-table(randomized_dat$assignment != "control", randomized_dat$vb_tsmart_hd)
-
-# if necessary subtract extras from treatment groups
-randomized_dat <- randomized_dat %>%
-  sample_n(size = nrow(.), replace = FALSE) %>%
-  mutate(get_treated = assignment != "control") %>%
-  group_by(vb_tsmart_hd, get_treated) %>%
+  arrange(-catalistmodel_ticket_splitter) %>%
   mutate(id = row_number()) %>%
   ungroup() %>%
-  filter(id <=11000 | get_treated == FALSE) %>%
-  filter(vb_tsmart_hd %in% c(19, 71, 39, 110) | id <=1500 | get_treated == FALSE) %>%
-  select(-id)
+  filter((id <= 1000 & vb_tsmart_hd %in% c(5, 53))| (id <=4000 * vb_tsmart_hd %in% c(45, 82, 83, 98)))
 
-# check randomization and adding non-experiment people seems right
-table(randomized_dat$assignment, useNA = 'always')
-table(randomized_dat$assignment != "control", useNA = 'always')
-table(randomized_dat$vb_tsmart_hd, randomized_dat$assignment, useNA = 'always')
-table(randomized_dat$vb_tsmart_hd, randomized_dat$in_experiment, useNA = 'always')
-table(randomized_dat$passed_phone_screen, randomized_dat$assignment)
+table(northcarolina_dat$vb_tsmart_hd)
 
 # Data Checks -------------------------------------------------------------
-# Check that balance was correct
-randomized_dat %>%
-  filter(in_experiment == 1) %>%
-  select(assignment, vb_voterbase_gender) %>%
-  table() %>%
-  prop.table(margin = 1)
-
-randomized_dat %>%
-  filter(in_experiment == 1) %>%
-  select(assignment, college) %>%
-  table() %>%
-  prop.table(margin = 1)
-
-randomized_dat %>%
-  filter(in_experiment == 1) %>%
-  mutate(party = fct_lump(vb_vf_party)) %>%
-  select(assignment, party) %>%
-  table() %>%
-  prop.table(margin = 1) %>%
-  round(digits = 3)
-
-randomized_dat %>%
-  filter(in_experiment == 1) %>%
-  select(assignment, vb_education) %>%
-  table() %>%
-  prop.table(margin = 1) %>%
-  round(digits = 2)
-
-randomized_dat %>%
-  filter(in_experiment == 1) %>%
-  group_by(assignment) %>%
+northcarolina_dat %>%
   summarise(partisan = mean(ts_tsmart_partisan_score),
             ideology = mean(ts_tsmart_ideology_score, na.rm = T),
             os = mean(os_score, na.rm = T),
             am = mean(am_score, na.rm = T),
+            nm = mean(nm_score, na.rm = T),
             turnout = mean(ts_tsmart_offyear_general_turnout_score),
             evangelical = mean(ts_tsmart_evangelical_raw_score, na.rm = T),
             otherchristian = mean(ts_tsmart_otherchristian_raw_score, na.rm = T),
@@ -368,21 +236,25 @@ randomized_dat %>%
             prochoice = mean(ts_tsmart_prochoice_score, na.rm = T))
 
 # Check that standard data issues are not present
-length(unique(randomized_dat$vb_voterbase_id)) == nrow(randomized_dat)
-sum(str_length(randomized_dat$vb_tsmart_first_name) == 1) == 0
-sum(randomized_dat$vb_voterbase_mailable_flag=="Yes") == nrow(randomized_dat)
+length(unique(northcarolina_dat$vb_voterbase_id)) == nrow(northcarolina_dat)
+sum(str_length(northcarolina_dat$vb_tsmart_first_name) == 1) == 0
+sum(northcarolina_dat$vb_voterbase_mailable_flag=="Yes") == nrow(northcarolina_dat)
 
-randomized_dat %>%
+northcarolina_dat %>%
   ggplot(aes(x=ts_tsmart_presidential_general_turnout_score)) +
   geom_histogram()
 
-randomized_dat %>%
+northcarolina_dat %>%
   ggplot(aes(x=nm_score)) +
   geom_histogram()
 
-randomized_dat %>%
+northcarolina_dat %>%
   ggplot(aes(x=catalistmodel_ticket_splitter)) +
   geom_histogram()
+
+##################################
+# Everything below here is unedited
+##################################
 
 # Save randomized results -------------------------------------------------
 # save full results as RDS
