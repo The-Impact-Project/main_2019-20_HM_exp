@@ -45,6 +45,7 @@ raw_nc_dat <- "SELECT
   vb_tsmart_cd,
   vb_tsmart_sd,
   vb_tsmart_hd,
+  hb1020_new_nc_tsmart_hd,
   vb_tsmart_address_deliverability_indicator,
   vb_voterbase_mailable_flag,
   vb_voterbase_general_votes,
@@ -169,9 +170,9 @@ FROM impactproject.ticketsplitter_matching_nc_matched
        ON ticketsplitter_matching_nc_matched.voterbase_id = ntl_current.vb_voterbase_id
   LEFT JOIN impactproject.segment_scores USING (vb_voterbase_id)
   LEFT JOIN tmc.email_current ON ntl_current.vb_voterbase_id = email_current.voterbase_id
+  LEFT JOIN ts.nc_newdistricts_xref_20191210 ON nc_newdistricts_xref_20191210.voterbase_id = ntl_current.vb_voterbase_id
 WHERE ts_tsmart_presidential_general_turnout_score > 40
   AND vb_tsmart_state = 'NC'
-  -- AND vb_tsmart_hd IN ('082', '083', '098', '045', '053', '005') THIS LINE IS COMMENTED OUT. WAITING FOR NC TargetSmart table
   AND vb_voterbase_age > 17
   AND vb_voterbase_age < 100
   AND vb_voterbase_deceased_flag IS NULL" %>%
@@ -185,6 +186,12 @@ raw_nc_dat %>%
   saveRDS(here("output", "raw_northcarolina_dat.Rds"))
 
 raw_nc_dat <- readRDS(here("output", "raw_northcarolina_dat.Rds"))
+
+raw_nc_dat %>%
+  count(hb1020_new_nc_tsmart_hd, sort = T)
+
+raw_nc_dat <- raw_nc_dat %>%
+  filter(hb1020_new_nc_tsmart_hd %in% c(82, 83, 98, 45, 53, 5))
 
 northcarolina_dat <- raw_nc_dat %>%
   group_by(vb_voterbase_id) %>%
@@ -206,21 +213,23 @@ northcarolina_dat <- raw_nc_dat %>%
   filter(!is.na(catalistmodel_ticket_splitter)) %>%
   add_count(vb_tsmart_full_address, name = "targets_in_hh")
 
-raw_nc_dat %>%
-  count(vb_tsmart_hd, sort = T)
-  
-
-### I NEED TO MERGE IN TS SHAPEFILE DATA AND USE THAT TO FILTER ADDRESSES
-
-# limit who is in experiment in smaller districts
+# limit who is in program in smaller districts
 northcarolina_dat <- northcarolina_dat %>%
-  group_by(vb_tsmart_hd) %>%
+  group_by(hb1020_new_nc_tsmart_hd) %>%
   arrange(-catalistmodel_ticket_splitter) %>%
   mutate(id = row_number()) %>%
   ungroup() %>%
-  filter((id <= 1000 & vb_tsmart_hd %in% c(5, 53))| (id <=4000 * vb_tsmart_hd %in% c(45, 82, 83, 98)))
+  filter((id <= 1000 & hb1020_new_nc_tsmart_hd %in% c(5, 53))| (id <=4000 * hb1020_new_nc_tsmart_hd %in% c(45, 82, 83, 98)))
 
-table(northcarolina_dat$vb_tsmart_hd)
+# get counts of people and households per district
+northcarolina_dat %>%
+  count(hb1020_new_nc_tsmart_hd) %>%
+  arrange(hb1020_new_nc_tsmart_hd)
+
+northcarolina_dat %>%
+  group_by(hb1020_new_nc_tsmart_hd) %>%
+  summarise(count = n_distinct(HHID)) %>%
+  arrange(hb1020_new_nc_tsmart_hd)
 
 # Data Checks -------------------------------------------------------------
 northcarolina_dat %>%
@@ -252,20 +261,15 @@ northcarolina_dat %>%
   ggplot(aes(x=catalistmodel_ticket_splitter)) +
   geom_histogram()
 
-##################################
-# Everything below here is unedited
-##################################
-
-# Save randomized results -------------------------------------------------
+# Save results -------------------------------------------------
 # save full results as RDS
-saveRDS(randomized_dat, here("output", paste0("michigan_randomized_dat", Sys.Date(), ".Rds")))
+saveRDS(northcarolina_dat, here("output", paste0("northcarolina_dat", Sys.Date(), ".Rds")))
 
 # save dataset for vendors as RDS and CSV
-michigan_data_for_vendors <- randomized_dat %>%
-  filter(assignment %in% c("not_in_experiment", "treatment")) %>%
+northcarolina_data_for_vendors <- northcarolina_dat %>%
   select(vb_voterbase_id,
          vb_voterid,
-         vb_tsmart_hd,
+         hb1020_new_nc_tsmart_hd,
          vb_tsmart_first_name,
          vb_tsmart_middle_name,
          vb_tsmart_last_name,
@@ -275,24 +279,22 @@ michigan_data_for_vendors <- randomized_dat %>%
          vb_tsmart_state,
          vb_tsmart_zip,
          vb_tsmart_zip4,
-         screened_phone,
+         vb_voterbase_phone,
          vb_voterbase_gender,
          vb_voterbase_dob,
          vb_voterbase_age,
-         voterbase_email,
-         assignment,
-         screen_result)
+         voterbase_email)
 
-saveRDS(michigan_data_for_vendors, 
-        here("output", paste0("michigan_data_for_vendors", Sys.Date(), ".Rds")))
-write_csv(michigan_data_for_vendors, 
-          here("output", paste0("michigan_data_for_vendors", Sys.Date(), ".csv")))
+saveRDS(northcarolina_data_for_vendors, 
+        here("output", paste0("northcarolina_data_for_vendors", Sys.Date(), ".Rds")))
+write_csv(northcarolina_data_for_vendors, 
+          here("output", paste0("northcarolina_data_for_vendors", Sys.Date(), ".csv")))
 
 # create audience_report
-randomized_dat %>%
-  filter(assignment != "control") %>%
+northcarolina_dat %>%
   mutate(vb_voterbase_deceased_flag = NA) %>%
+  mutate(vb_tsmart_hd = hb1020_new_nc_tsmart_hd) %>%
   TIPtools::audience_document(output_directory = here("output", "audience_reports"), 
-                              output_title = "Michigan HM Audience",
+                              output_title = "North Carolina HM Audience",
                               refresh_list = FALSE,
                               district_cross = "hd")
