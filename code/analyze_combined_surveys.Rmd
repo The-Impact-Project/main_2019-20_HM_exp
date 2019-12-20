@@ -1,0 +1,604 @@
+---
+title: "DRAFT Fall 2019 H&M Experiment"
+author: "Andy Zack"
+date: "12/20/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, echo = F, message=F, warning=F}
+library(TIPtools)
+library(tidyverse)
+library(civis)
+library(here)
+library(lme4)
+library(kableExtra)
+```
+
+```{r load_data, echo = F, message=F, warning=F}
+raw_az <- read_csv(here("data", "AZ_RETURN.txt")) %>%
+  filter(FDISP=="01") %>%
+  filter(vb_voterbase_id != "AZ-4557896") %>%
+  filter(vb_voterbase_id != "AZ-4866224") %>%
+  as_tibble() %>% 
+  select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id) %>%
+  mutate(state = "AZ")
+
+raw_co <- read_csv(here("data", "CO_RETURN.txt")) %>%
+  filter(FDISP=="01") %>%
+  as_tibble() %>% 
+  select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id) %>%
+  mutate(state = "CO")
+
+raw_fl <- read_csv(here("data", "FL_RETURN.txt")) %>%
+  filter(FDISP=="01") %>%
+  as_tibble() %>%
+  select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id) %>%
+  mutate(state = "FL")
+
+raw_me <- read_csv(here("data", "ME_RETURN.txt")) %>%
+  filter(FDISP=="01") %>%
+  as_tibble() %>%
+  select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id) %>%
+  mutate(state = "ME")
+  
+raw_mi <- read_csv(here("data", "MI_RETURN.txt")) %>%
+  filter(FDISP=="01") %>%
+  as_tibble() %>%
+  select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id) %>%
+  mutate(state = "MI")
+
+randomized_dat <- readRDS(here("output", "all_randomized_dat.Rds")) %>%
+  filter(assignment %in% c("treatment", "control")) %>%
+  mutate(maine_ticket_splitter = fct_explicit_na(maine_ticket_splitter),
+         dem = 0)
+```
+
+```{r process_data, echo=F}
+randomized_dat$dem[randomized_dat$vb_tsmart_state == "MI" & randomized_dat$vb_tsmart_hd %in% c(19, 35, 71)] <- 1
+randomized_dat$dem[randomized_dat$vb_tsmart_state == "ME" & randomized_dat$vb_tsmart_sd %in% c(14)] <- 1
+randomized_dat$dem[randomized_dat$vb_tsmart_state == "CO" & randomized_dat$vb_tsmart_sd %in% c(16, 19, 26)] <- 1
+
+# Combine Surveys Across States -------------------------------------------
+raw_combined <- bind_rows(
+  select(raw_az, vb_voterbase_id, DATE, TIME, duration, state, Q2, Q3=Q3A, Q4=Q4A, Q5, Q6, Q7, Q8),
+  select(raw_co, vb_voterbase_id, DATE, TIME, duration, state, Q2, Q3, Q4, Q5A, Q5B, Q6, Q7, Q8),
+  select(raw_fl, vb_voterbase_id, DATE, TIME, duration, state, Q2, Q3, Q4, Q5A, Q5B, Q6, Q7, Q8),
+  select(raw_me, vb_voterbase_id, DATE, TIME, duration, state, Q2, Q3, Q4, Q5, Q6, Q7, Q8),
+  select(raw_mi, vb_voterbase_id, DATE, TIME, duration, state, Q2, Q3=Q3B, Q4=Q4B, Q5, Q6, Q7, Q8)
+)
+
+# Merge to Voter File -----------------------------------------------------
+survey_results <- raw_combined %>%
+  left_join(randomized_dat, by = "vb_voterbase_id") %>%
+  mutate(Qgender = recode(as.character(Q2), 
+                          "1" = "Male",
+                          "2" = "Female",
+                          "8888" = "Unknown"),
+         year_difference = (floor(vb_voterbase_dob/10000)) - Q8,
+         Qfav_binary = recode(as.character(Q3), 
+                              "1" = "Favorable",
+                              "2" = "Unfavorable",
+                              "7777" = "Never Heard",
+                              "8888" = "Don't Know"),
+         Qfav_modifier = recode(as.character(Q4),
+                                "1" = "Strongly",
+                                "2" = "Somewhat",
+                                "8888" = "Somewhat"),
+         Qfav = as_factor(str_remove(string = paste(Qfav_modifier, Qfav_binary), pattern = "NA ")),
+         Qfav = fct_relevel(Qfav, 
+                            "Strongly Favorable",
+                            "Somewhat Favorable",
+                            "Never Heard",
+                            "Don't Know",
+                            "Somewhat Unfavorable",
+                            "Strongly Unfavorable"),
+         Qapproach = recode(as.character(Q6),
+                            "1" = "Keeping taxes low",
+                            "2" = "Investing in schools",
+                            "3" = "Both",
+                            "4" = "Something else",
+                            "8888" = "Don't Know"),
+         Qrecall = recode(as.character(Q7),
+                          "1" = "Yes",
+                          "2" = "No",
+                          "8888" = "Don't Know")) %>%
+  filter(vb_voterbase_gender == "Unknown" | 
+           Qgender == "Unknown" | 
+           vb_voterbase_gender == Qgender) %>%
+  filter(Q8 > 5000 | abs(year_difference < 3)) %>%
+  mutate(Qgender = factor(Qgender),
+         Qapproach = factor(Qapproach, levels = c("Investing in schools", "Both", "Don't Know", "Something else", "Keeping taxes low")),
+         Qrecall = factor(Qrecall, levels = c("Yes", "Don't Know", "No"))) %>%
+  mutate(Qfav_flipped = if_else(dem == 0,
+                                fct_recode(Qfav,
+                                           `Strongly Favorable` = "Strongly Unfavorable",
+                                           `Somewhat Favorable` = "Somewhat Unfavorable",
+                                           `Strongly Unfavorable` = "Strongly Favorable",
+                                           `Somewhat Unfavorable` = "Somewhat Favorable"),
+                                Qfav),
+         Qfav_flipped_model = if_else(Qfav_flipped %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0),
+         Qunfav_flipped_model = if_else(Qfav_flipped %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0),
+         Qfav_flipped_continous = as.numeric(fct_collapse(Qfav_flipped, mid = c("Never Heard", "Don't Know")))) %>%
+  select(-Qfav_modifier)
+```
+
+```{r weight_data, echo=F, message=F}
+az_weighted <- weight_data(survey_dataset = survey_results[survey_results$state=='AZ',],
+            universe_dataset = randomized_dat[randomized_dat$vb_tsmart_state == 'AZ',],
+            max_weight = 3,
+            assignment,
+            college,
+            vb_voterbase_gender,
+            vb_tsmart_hd)
+
+co_weighted <- weight_data(survey_dataset = survey_results[survey_results$state=='CO',],
+                           universe_dataset = randomized_dat[randomized_dat$vb_tsmart_state == 'CO',],
+                           max_weight = 3,
+                           assignment,
+                           college,
+                           vb_voterbase_gender,
+                           vb_tsmart_sd)
+
+fl_weighted <- weight_data(survey_dataset = survey_results[survey_results$state=='FL',],
+                           universe_dataset = randomized_dat[randomized_dat$vb_tsmart_state == 'FL',],
+                           max_weight = 3,
+                           assignment,
+                           college,
+                           vb_voterbase_gender,
+                           vb_tsmart_hd)
+
+me_weighted <- weight_data(survey_dataset = survey_results[survey_results$state=='ME',],
+                           universe_dataset = randomized_dat[randomized_dat$vb_tsmart_state == 'ME',],
+                           max_weight = 3,
+                           assignment,
+                           college,
+                           vb_voterbase_gender,
+                           vb_tsmart_sd)
+
+mi_weighted <- weight_data(survey_dataset = survey_results[survey_results$state=='MI',],
+                           universe_dataset = randomized_dat[randomized_dat$vb_tsmart_state == 'MI',],
+                           max_weight = 3,
+                           assignment,
+                           college,
+                           vb_voterbase_gender,
+                           vb_tsmart_hd)
+
+combined_weighted <- bind_rows(az_weighted,
+                               co_weighted,
+                               fl_weighted,
+                               me_weighted,
+                               mi_weighted)
+remove(az_weighted, co_weighted, fl_weighted, me_weighted, mi_weighted)
+```
+
+```{r get_missing_ticketsplitter, echo=F, warning=F, message=F}
+ids <- combined_weighted %>%
+  pull(vb_voterbase_id) %>%
+  paste(collapse = "', '")
+query <- sql(paste0("SELECT voterbase_id AS vb_voterbase_id,
+catalistmodel_ticket_splitter 
+FROM impactproject.ticketsplitter_matching_matched
+WHERE voterbase_id IN ('", ids, "');"))
+ts_scores <- read_civis(query, database = "TMC")
+
+combined_weighted <- combined_weighted %>%
+  select(-catalistmodel_ticket_splitter) %>%
+  left_join(ts_scores)
+
+remove(ids, query, ts_scores)
+```
+
+## Summary
+
+In November and December, 2019 we ran Hearts and Minds programs across a handful of legislative districts in five states. These programs were followed by a live-interviewer telephone survey designed to evaluate the effects of these programs. The survey included questions about name-ID of their elected officials, favorability ratings of these same officials, issue support of key issues in each state, recall of the mail portion of each program, and one question about their views on the overall approach of government.
+
+Within each state, we held out a control group that also recieved the phone survey in order to compare the survey results. There were `r nrow(raw_combined)` completed surveys. After filtering out surveys where the age or gender of the respondent did not match the voter file, we ended up with `r nrow(combined_weighted)` surveys in the experiment. The following table shows the breakdown of responses by state and treatment group.
+
+The data was weighted by treatment assignment, education, gender, and legislative district, with weights trimmed at 1/3 and 3.
+
+```{r response_rate_table, echo=F}
+combined_weighted %>%
+  select(state, assignment) %>%
+  table() %>%
+  addmargins() %>%
+  kable() %>%
+  kable_styling(position = "center") %>%
+  row_spec(0, bold = T)
+```
+
+## Baseline Results
+```{r baseline_metrics, echo=F}
+cant_rate <- (sum(combined_weighted$weight[combined_weighted$assignment=="control" & combined_weighted$Q3 > 2]) / 
+  sum(combined_weighted$weight[combined_weighted$assignment=="control"])) %>%
+  scales::percent(accuracy = 1)
+
+fav <- (sum(combined_weighted$weight[combined_weighted$assignment=="control" & combined_weighted$Q3 == 1]) / 
+  sum(combined_weighted$weight[combined_weighted$assignment=="control"])) %>%
+  scales::percent(accuracy = 1)
+
+unfav <- (sum(combined_weighted$weight[combined_weighted$assignment=="control" & combined_weighted$Q3 == 2]) / 
+  sum(combined_weighted$weight[combined_weighted$assignment=="control"])) %>%
+  scales::percent(accuracy = 1)
+
+investing <- (sum(combined_weighted$weight[combined_weighted$assignment=="control" & combined_weighted$Q6 == 2]) / sum(combined_weighted$weight[combined_weighted$assignment=="control"])) %>%
+  scales::percent(accuracy = 1)
+
+reducing <- (sum(combined_weighted$weight[combined_weighted$assignment=="control" & combined_weighted$Q6 == 1]) / sum(combined_weighted$weight[combined_weighted$assignment=="control"])) %>%
+  scales::percent(accuracy = 1)
+```
+
+Results from the control group on several of the key issues give a sense of where our audience stands, absent any contact from the Impact Project.
+
+* `r cant_rate` cannot rate their State Representative or Senator. This combines both those who say they have never heard of the official and those who have heard, but say they cannot rate. `r fav` have favorable views, and `r unfav` have unfavorable views of their elected official.
+* `r investing` say that investing in schools and infrastructure and expanding health care would be a better approach for their state government, while `r reducing` would prefer to keeping taxes low for the middle class, and reduce burdensome regulations. The rest responded "both," "something else," or "don't know." 
+
+## Mail Recall
+
+The mail recall question helps put the effects of the program into context.
+
+>In the last several weeks, did you receive any mail about issues that the state legislature is working on in **[STATE]**?
+
+The chart below shows that many people in the treatment group do not recall receiving _any_ mail over the several weeks prior to the survey. In all states, the treatment group recalls receiving mail at a significantly higher rate than the treatment group. However, even in Maine, which has the highest rate of recall, only 20% of people in the treatment group remember getting mail. Furthermore, 12% of those in the Maine _control_ group say that got mail.
+
+The low rates of recall are not unusual for a program like this. They could be caused by several factors, such as the voterfile address or phone number not matching the correct person, the voter not being the person in the household who checks mail, survey mismeasurement, or the respondent misremembering. Regardless of the cause, this is a useful metric for putting the rest of the survey results in context.
+
+```{r recall_graph, echo=FALSE, fig.height=3.5}
+combined_weighted %>%
+  group_by(state, assignment, Qrecall) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(Qrecall == "Yes") %>%
+  ggplot(aes(x=state, y = freq)) +
+  geom_bar(aes(fill=assignment), stat = "identity", position="dodge") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#bababa",
+                               "#018571")) +
+  theme(legend.position="bottom",
+        legend.title = element_blank()) +
+  labs(x="", y="% That Recall Mail")
+```
+
+
+## Favorability
+
+Our programs' impact on elected's favorability ratings varies between Republican-held and Democrat-held districts. For this next section, the analysis is seperated into these two groups due to this difference.
+
+The effect on favorablity is evaluated in three ways. The first two treat favorability as a _binary_ outcome, while the third treats it as a _continuous_ outcome.
+
+* Do our programs change the percent of people who give **favorable** ratings?
+* Do our programs change the percent of people who give **unfavorable** ratings?
+* Do our programs change the **average** favorability, when evaluated on a five-point scale where **strongly unfavorable** = 1 and **strongly favorable** = 5?
+
+#### Democrat-Held Districts
+
+In the entire program, we only contacted people living in seven districts that are currently held by Democrats. We recieved `r sum(combined_weighted$dem ==1)` responses from people living in these districts, so the estimates here are less precise than those for Republican-held districts. In the Democratic districts, both favorability and unfavorability trended down. However neither of these changes were significant.
+
+```{r dem_fav_chart, echo=FALSE, fig.height=2.5}
+combined_weighted %>%
+  filter(dem==1) %>%
+  group_by(dem, assignment, Qfav) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qfav)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#f1b6da",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#b8e186",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+#### Republican-Held Districts
+
+In the Republican-held districts, we did measure significant effects of our program. Unfavorable ratings significantly increased, and the average score on the five-point scale moved towards _strongly unfavorable_.
+
+```{r rep_fav_chart, echo=FALSE, fig.height=2.5}
+combined_weighted %>%
+  filter(dem==0) %>%
+  group_by(dem, assignment, Qfav) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qfav)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#f1b6da",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#b8e186",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+To further examine our effect on unfavorable ratings in Republican held districts, the following plot shows the effect broken down by state. The results in Florida and Arizona are both significant on their own. The remaining states did not show significant changes.
+
+```{r unfav_on_r_by_state, echo = FALSE, echo=FALSE, fig.height=3.5}
+combined_weighted %>%
+  filter(dem==0) %>%
+  group_by(state, assignment, Q3) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(Q3==2) %>%
+  select(-c(n, Q3)) %>%
+  spread(assignment, freq) %>%
+  mutate(unfav_effect = treatment - control) %>%
+  ggplot(aes(x=reorder(state, -unfav_effect), y = unfav_effect)) +
+    geom_bar(stat = "identity", fill = "#4dac26") +
+    theme_minimal() +
+    scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+    labs(x = "", y = "Effect on Unfavorable Ratings (pp)")
+```
+
+## Approach to Governing
+
+Each state's survey included a question to evaluate our program's impact on voter's general approach to governing. Our program caused little change in the answers to this question.
+
+
+>Next, which approach do you think would be better for **[STATE]**’s government: 
+
+>•	Keeping taxes low for the middle class, and reducing burdensome regulations and taxes, or 
+
+>•	Ensuring big corporations and the wealthy pay their fair share so we can invest in schools, roads, and infrastructure, and expand access to affordable health care
+
+```{r approach_graph, echo=FALSE, fig.height=2.5}
+combined_weighted %>%
+  mutate(Qapproach = fct_collapse(Qapproach, "Both/DK/Something else" = c("Both", "Don't Know", "Something else"))) %>%
+  group_by(assignment, Qapproach) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qapproach)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#2b83ba",
+                               '#bababa',
+                               "#d7191c")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+## Issues
+
+In each state we asked one or two issue support questions about issues specific to that state. Our programs had very little effect on issue support in nearly every state except for Michigan. There we were able to significantly increase support for requiring overtime pay to salaried workers.
+
+```{r make_issue_df, echo = FALSE}
+issue_df <- bind_rows(
+  select(combined_weighted, state, assignment, weight, Q5) %>% filter(!is.na(Q5)) %>% mutate(issue = "A"),
+  select(combined_weighted, state, assignment, weight, Q5=Q5A) %>% filter(!is.na(Q5)) %>% mutate(issue = "A"),
+  select(combined_weighted, state, assignment, weight, Q5=Q5B) %>% filter(!is.na(Q5)) %>% mutate(issue = "B")) %>%
+  mutate(Qissue = recode(as.character(Q5),
+                         "1" = "Strongly Support",
+                         "2" = "Somewhat Support",
+                         "3" = "Somewhat Oppose",
+                         "4" = "Strongly Oppose",
+                         "8888" = "No Opinion")) %>%
+  mutate(Qissue = factor(Qissue, levels = c("Strongly Support", 
+                                            "Somewhat Support", 
+                                            "No Opinion", 
+                                            "Somewhat Oppose", 
+                                            "Strongly Oppose")))
+```
+
+```{r issue_plot_function, echo = F}
+issue_plot <- function(df, state_abbr, issue_letter) {
+  df %>%
+  filter(issue==issue_letter, state == state_abbr) %>%
+  group_by(assignment, Qissue) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qissue)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#e66101",
+                               "#fdb863",
+                               "#f7f7f7",
+                               "#b2abd2",
+                               "#5e3c99")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+}
+```
+
+#### Arizona Junk Insurance
+
+>Arizona recently passed a law that allows people to buy inexpensive health insurance plans that offer minimal coverage. Supporters say this reduces health insurance costs, but opponents say these are “junk” plans and will not offer protections for pre-existing conditions. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose allowing people to buy these low-cost, minimal coverage plans?
+
+```{r az_issue_a, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "AZ", issue_letter = "A")
+```
+
+#### Colorado Retirement
+
+> Colorado is considering a law to create a retirement plan that is available to workers who don’t have one through their jobs. This would allow employees to save for retirement no matter where they work, but some industry leaders fear it could be a burden on businesses. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose the state creating a retirement plan that is available to all workers? 
+
+```{r co_issue_a, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "CO", issue_letter = "A")
+```
+
+#### Colorado Prescription Drugs
+
+>Colorado passed a law that would allow our state to negotiate importing prescription drugs from Canada. This law would make prescription drugs more affordable, but opponents say it could be hard to ensure the safety of such drugs. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose allowing Colorado to negotiate importing drugs from Canada?
+
+```{r co_issue_b, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "CO", issue_letter = "B")
+```
+
+
+#### Florida Family Leave
+
+>Florida is considering a law to require employers to give their workers paid family leave. This would allow people to take paid time off to care for a new child or sick family member, but some industry leaders fear it could cost some jobs. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose requiring employers to give employees paid family leave?
+
+```{r fl_issue_a, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "FL", issue_letter = "A")
+```
+
+#### Florida Pre-existing Conditions
+
+>Florida is considering another law that would limit how much insurance companies can charge people with pre-existing conditions. This law would make health insurance more affordable for those with pre-existing conditions, but opponents say it could raise costs for others. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose requiring insurance companies to provide more affordable rates for patients with pre-existing conditions?
+
+```{r fl_issue_b, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "FL", issue_letter = "B")
+```
+
+#### Maine Pay Equity
+
+>The Maine state legislature recently passed a law to help ensure that men and women get paid the same amount for equal work. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose this law?
+
+```{r me_issue_a, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "ME", issue_letter = "A")
+```
+
+#### Michigan Overtime
+
+> The state of Michigan is considering a rule that would require employers to pay overtime to some salaried workers if they work more than 40 hours in a week. Do you strongly support, somewhat support, somewhat oppose, or strongly oppose this law?
+
+```{r mi_issue_a, echo=F, fig.height=2}
+issue_df %>% 
+  issue_plot(state_abbr = "MI", issue_letter = "A")
+```
+
+## Effect by Audience
+
+## Modeling
+
+# Run some models ---------------------------------------------------------
+
+Republicans favorability is reduced, not significant
+
+```{r}
+combined_weighted %>%
+  filter(dem==0) %>%
+  mutate(fav_model = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>%
+  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
+  summary()
+```
+
+Republicans unfav increases
+```{r}
+combined_weighted %>%
+  filter(dem==0) %>%
+  mutate(fav_model = if_else(Qfav %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0)) %>%
+  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
+  summary()
+```
+
+# Dem fav decreases, not significant
+
+```{r}
+combined_weighted %>%
+  filter(dem==1) %>%
+  mutate(fav_model = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>%
+  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
+  summary()
+```
+
+# Dem Unfav decreases, not significant
+
+```{r}
+combined_weighted %>%
+  filter(dem==1) %>%
+  mutate(fav_model = if_else(Qfav %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0)) %>%
+  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
+  summary()
+```
+
+# dems don't change with continous outcome
+
+```{r}
+combined_weighted %>%
+  filter(dem==1) %>%
+  lm(formula = Qfav_flipped_continous~assignment, weights = weight) %>%
+  summary()
+```
+
+# republicans move towards unfav with continous outcome
+
+```{r}
+combined_weighted %>%
+  filter(dem==0) %>%
+  lm(formula = Qfav_flipped_continous~assignment, weights = weight) %>%
+  summary()
+```
+
+
+combined_weighted %>%
+  filter(dem == 0) %>%
+  select(Qfav,Qfav_flipped_continous) %>%
+  table()
+
+# we decrease favorability from republicans
+
+  
+# Trying mixed model for MRP
+mixed.lmer <- combined_weighted %>%
+  mutate(fav_model = as.factor(if_else(Qfav_flipped %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0))) %>%
+  glmer(formula = fav_model ~ assignment + college + vb_voterbase_gender + (1|vb_tsmart_state) + (1|dem), family = "binomial")
+
+summary(mixed.lmer)
+
+predict(mixed.lmer, 
+        randomized_dat %>% mutate(assignment="treatment"), 
+        type = "response",
+        allow.new.levels=T) %>% 
+  mean()
+
+combined_weighted %>% 
+  #filter(state == "MI", vb_tsmart_hd==71) %>% 
+  mutate(outcome = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>% 
+  group_by(state) %>%
+  summarize(mn = mean(outcome))
+            pull(outcome) %>% 
+  mean()
+  
+# Michigan model
+```{r}
+issue_df %>%
+  filter(state =="AZ") %>%
+  mutate(Qissue_model = if_else(Q5 < 3, 1, 0)) %>% 
+  lm(formula = Qissue_model~assignment, weights = weight) %>%
+  summary()
+```
+
