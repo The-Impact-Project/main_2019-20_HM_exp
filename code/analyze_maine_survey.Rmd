@@ -23,7 +23,7 @@ library(here)
 
 maine_dems <- c(14)
 
-amm_results <- read_csv(here("data", "TMC_ME_Return_1122_1124.csv")) %>%
+amm_results <- read_csv(here("data", "ME_RETURN.txt")) %>%
   filter(FDISP=="01") %>%
   as_tibble() %>%
   select(DATE, TIME, duration, starts_with("Q"), vb_voterbase_id)
