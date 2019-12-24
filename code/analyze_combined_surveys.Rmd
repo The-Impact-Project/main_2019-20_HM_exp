@@ -16,6 +16,7 @@ library(civis)
 library(here)
 library(lme4)
 library(kableExtra)
+library(causalToolbox)
 ```
 
 ```{r load_data, echo = F, message=F, warning=F}
@@ -122,7 +123,9 @@ survey_results <- raw_combined %>%
                                 Qfav),
          Qfav_flipped_model = if_else(Qfav_flipped %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0),
          Qunfav_flipped_model = if_else(Qfav_flipped %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0),
-         Qfav_flipped_continous = as.numeric(fct_collapse(Qfav_flipped, mid = c("Never Heard", "Don't Know")))) %>%
+         Qfav_flipped_continous = as.numeric(fct_collapse(Qfav_flipped, mid = c("Never Heard", "Don't Know"))),
+         favorable = if_else(Q3==1, 1, 0),
+         unfavorable = if_else(Q3==2, 1, 0))  %>%
   select(-Qfav_modifier)
 ```
 
@@ -334,24 +337,38 @@ combined_weighted %>%
   labs(x = "", y = "")
 ```
 
-To further examine our effect on unfavorable ratings in Republican held districts, the following plot shows the effect broken down by state. The results in Florida and Arizona are both significant on their own. The remaining states did not show significant changes.
+To further examine our effect on favorable and unfavorable ratings, the following plot shows the effect broken down by state, and further broken out into Republican-held and Democrat-held districts. The effect on unfavorable ratings in Florida and Arizona are both significant for Republican districts. The remaining states did not show significant changes. Positive numbers (bars above the 0% line) indicate we increased the number of people given that rating. The grey error bars signifiy 95% confidence intervals. So, for example, in the Republican districts in Michigan, we increased favorable ratings by 4% and decreased unfavorable ratings by 2%.
 
-```{r unfav_on_r_by_state, echo = FALSE, echo=FALSE, fig.height=3.5}
+```{r effect_by_electeds_party_and_state, echo=F, fig.height=3.5}
 combined_weighted %>%
-  filter(dem==0) %>%
-  group_by(state, assignment, Q3) %>%
-  summarize(n = sum(weight)) %>%
-  mutate(freq = n / sum(n)) %>%
-  filter(Q3==2) %>%
-  select(-c(n, Q3)) %>%
-  spread(assignment, freq) %>%
-  mutate(unfav_effect = treatment - control) %>%
-  ggplot(aes(x=reorder(state, -unfav_effect), y = unfav_effect)) +
-    geom_bar(stat = "identity", fill = "#4dac26") +
-    theme_minimal() +
-    scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
-    labs(x = "", y = "Effect on Unfavorable Ratings (pp)")
+  select(state, dem, assignment, favorable, unfavorable, weight) %>%
+  gather(fav_unfav, response, favorable:unfavorable) %>%
+  group_by(state, dem, fav_unfav) %>%
+  nest() %>%
+  mutate(lm_mod = map(data, ~lm(response~assignment, weights = weight, data = .))) %>%
+  mutate(tidy = map(lm_mod, broom::tidy)) %>%
+  unnest(tidy, .drop = T) %>%
+  filter(term=="assignmenttreatment") %>%
+  mutate(low = estimate - (std.error * 1.95),
+         high = estimate + (std.error * 1.95)) %>%
+  unite(bar_label, state, dem) %>%
+  mutate(bar_label = str_replace(bar_label, "_0", " R"),
+         bar_label = str_replace(bar_label, "_1", " D")) %>%
+  ggplot(aes(x=bar_label, y=estimate, fill=fav_unfav)) +
+    geom_bar(stat="identity", position = "dodge") +
+    geom_errorbar(aes(ymin=low, ymax=high), 
+                  position = "dodge",
+                  color="darkgrey",
+                  width=1) +
+  theme_minimal() +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x="State and Elected's Party", 
+       y = "Effect on Rating (pp) with 95% CIs",
+       fill = "") +
+  scale_fill_manual(values = c("#F4D03F", "#3f63f4"))
 ```
+
 
 ## Approach to Governing
 
@@ -501,6 +518,80 @@ issue_df %>%
 ```
 
 ## Effect by Audience
+
+#### TicketSplitter vs. New Middle Models
+
+```{r, include=F}
+nm_ts_dat <- combined_weighted %>%
+  filter(state %in% c("AZ", "ME", "MI")) %>%
+  mutate(ticket_splitter = if_else(!is.na(catalistmodel_ticket_splitter), "Yes", "No"),
+         new_middle = if_else(nm_score < 30 | is.na(nm_score), "No", "Yes")) 
+
+summary_nm_ts_table <- nm_ts_dat %>%
+  group_by(ticket_splitter, new_middle) %>%
+  summarise(n = n()) 
+```
+
+In Arizona, Maine, and Michigan, we targeted people who either had a high TicketSplitter score, or a high New Middle score. TicketSplitter is a score created by Catalist that is designed to identify people who are likely to split their ballots. The New Middle scores were created by Benenson and are designed to identify people with mixed views on economic policies. Both are being used here as proxies for persuadability on our core issues.
+
+Different New Middle score cutoffs were used in pulling audiences for the different states based on the needs of each state's program. For the purposes of this analysis, I am considering anyone with a score above 33 as New Middle. This roughly corresponds to the 30% of people with the highest New Middle scores.
+
+In these three states, we targeted `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="No") %>% pull(n)` people who are in the New Middle Audience, but not the Ticket Splitter audience, `r summary_nm_ts_table %>% filter(new_middle=="No", ticket_splitter=="Yes") %>% pull(n)` people who are Ticket Splitters, but not New Middle, and `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="Yes") %>% pull(n)` people who are in both audiences.
+
+```{r, include=F}
+summary_nm_ts_table %>%
+  rename(`Ticket Splitter` = "ticket_splitter",
+         `New Middle` = "new_middle") %>%
+  kable() %>%
+  row_spec(row = 0, bold=T)
+```
+
+```{r, include=F}
+nm_ts_dat %>%
+  filter(dem==0) %>%
+  group_by(ticket_splitter, new_middle, assignment, unfavorable) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(unfavorable == 1,
+         ticket_splitter=="Yes" | new_middle == "Yes") %>%
+  select(-n) %>%
+  mutate(audience = if_else(ticket_splitter=="No", "New Middle Only", if_else(new_middle=="No", "TicketSplitter Only", "Both"))) %>%
+  ggplot(aes(x=audience, y= freq, fill = assignment)) +
+  geom_bar(stat='identity', position="dodge") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  labs(x="",
+       y="% Unfavorable",
+       fill="",
+       title="% Unfavorable in R Districts by Audience and Treatment (AZ, ME, MI") +
+  theme_minimal()
+```
+
+
+```{r}
+nm_ts_dat %>%
+  lm(formula = unfavorable ~ 
+       assignment*new_middle + 
+       assignment*ticket_splitter) %>%summary()
+  broom::tidy()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Modeling
 
