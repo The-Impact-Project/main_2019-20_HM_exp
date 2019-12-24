@@ -523,7 +523,7 @@ issue_df %>%
 
 ```{r, include=F}
 nm_ts_dat <- combined_weighted %>%
-  filter(state %in% c("AZ", "ME", "MI")) %>%
+  filter(state %in% c("AZ", "ME", "MI", "CO")) %>%
   mutate(ticket_splitter = if_else(!is.na(catalistmodel_ticket_splitter), "Yes", "No"),
          new_middle = if_else(nm_score < 30 | is.na(nm_score), "No", "Yes")) 
 
@@ -536,9 +536,9 @@ In Arizona, Maine, and Michigan, we targeted people who either had a high Ticket
 
 Different New Middle score cutoffs were used in pulling audiences for the different states based on the needs of each state's program. For the purposes of this analysis, I am considering anyone with a score above 33 as New Middle. This roughly corresponds to the 30% of people with the highest New Middle scores.
 
-In these three states, we targeted `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="No") %>% pull(n)` people who are in the New Middle Audience, but not the Ticket Splitter audience, `r summary_nm_ts_table %>% filter(new_middle=="No", ticket_splitter=="Yes") %>% pull(n)` people who are Ticket Splitters, but not New Middle, and `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="Yes") %>% pull(n)` people who are in both audiences.
+In these three states plus Colorado where we used very broad targeting, we targeted `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="No") %>% pull(n)` people who are in the New Middle Audience, but not the Ticket Splitter audience, `r summary_nm_ts_table %>% filter(new_middle=="No", ticket_splitter=="Yes") %>% pull(n)` people who are Ticket Splitters, but not New Middle, and `r summary_nm_ts_table %>% filter(new_middle=="Yes", ticket_splitter=="Yes") %>% pull(n)` people who are in both audiences.
 
-```{r, include=F}
+```{r, echo=F}
 summary_nm_ts_table %>%
   rename(`Ticket Splitter` = "ticket_splitter",
          `New Middle` = "new_middle") %>%
@@ -546,7 +546,7 @@ summary_nm_ts_table %>%
   row_spec(row = 0, bold=T)
 ```
 
-```{r, include=F}
+```{r, echo=F, fig.height=3}
 nm_ts_dat %>%
   filter(dem==0) %>%
   group_by(ticket_splitter, new_middle, assignment, unfavorable) %>%
@@ -562,134 +562,116 @@ nm_ts_dat %>%
   labs(x="",
        y="% Unfavorable",
        fill="",
-       title="% Unfavorable in R Districts by Audience and Treatment (AZ, ME, MI") +
+       title="% Unfavorable in R Districts by Audience and Treatment (AZ, ME, MI)") +
   theme_minimal()
 ```
 
 
-```{r}
-nm_ts_dat %>%
-  lm(formula = unfavorable ~ 
-       assignment*new_middle + 
-       assignment*ticket_splitter) %>%summary()
-  broom::tidy()
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Modeling
 
-# Run some models ---------------------------------------------------------
-
-Republicans favorability is reduced, not significant
-
 ```{r}
-combined_weighted %>%
-  filter(dem==0) %>%
-  mutate(fav_model = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>%
-  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
-  summary()
+mod_df <- combined_weighted %>%
+           mutate(threeway_party = if_else(vb_vf_party == "Democrat", "Democrat", 
+                                           if_else(vb_vf_party=="Republican", "Republican", "Other")),
+                  threeway_race = fct_recode(vb_voterbase_race,
+                                    Other = "African-American",
+                                    Other = "Asian",
+                                    Other = "Native American",
+                                    Other = "Uncoded")) %>%
+  mutate(mixed_party_hh = length(unique(unlist(strsplit(toString(enh_tsmart_enhanced_party_code), split = '')))) > 1) %>%
+  mutate(mixed_party_hh = if_else(mixed_party_hh==TRUE, "mixed", "not_mixed")) %>%
+  mutate(years_since_reg = as.numeric(lubridate::interval(lubridate::ymd(vb_vf_earliest_registration_date), lubridate::ymd("20191224")))) %>%
+  select(threeway_party,
+         threeway_race,
+         mixed_party_hh,
+         college,
+         vb_voterbase_gender,
+         vb_voterbase_age,
+         ts_tsmart_urbanicity,
+         years_since_reg,
+         ts_tsmart_presidential_general_turnout_score,
+         ts_tsmart_partisan_score,
+         ts_tsmart_teaparty_score,
+         ts_tsmart_evangelical_raw_score,
+         ts_tsmart_catholic_raw_score,
+         ts_tsmart_otherchristian_raw_score,
+         ts_tsmart_ideology_score,
+         ts_tsmart_evangelical_raw_score,
+         ts_tsmart_otherchristian_raw_score,
+         ts_tsmart_nonchristian_raw_score,
+         ts_tsmart_prochoice_score,
+         ts_tsmart_path_to_citizen_score,
+         ts_tsmart_college_funding_score,
+         ts_tsmart_climate_change_score,
+         ts_tsmart_gun_control_score,
+         ts_tsmart_paid_leave_score,
+         ts_tsmart_minimum_wage_score,
+         ts_tsmart_govt_privacy_score,
+         ts_tsmart_campaign_finance_score,
+         ts_tsmart_tax_on_wealthy_score,
+         ts_tsmart_working_class_score,
+         ts_tsmart_activist_score,
+         ts_tsmart_trump_resistance_score,
+         ts_tsmart_trump_support_score,
+         ts_tsmart_gunowner_score,
+         ts_tsmart_veteran_score,
+         predictwise_authoritarianism_score,
+         predictwise_compassion_score,
+         predictwise_economic_populism_score,
+         predictwise_environmentalism_score,
+         predictwise_free_trade_score,
+         predictwise_globalism_score,
+         predictwise_guns_score,
+         predictwise_healthcare_women_score,
+         predictwise_healthcare_score,
+         predictwise_immigrants_score,
+         predictwise_military_score,
+         predictwise_populism_score,
+         predictwise_poor_score,
+         predictwise_presidential_score,
+         predictwise_racial_resentment_score,
+         predictwise_regulation_score,
+         predictwise_religious_freedom_score,
+         predictwise_taxes_score,
+         predictwise_traditionalism_score,
+         predictwise_trust_in_institutions_score,
+         vb_personal_voice_social_networker_demi_decile,
+         vb_professional_social_networker_demi_decile,
+         vb_purely_social_networker_demi_decile,
+         vb_social_networker_demi_decile,
+         enh_tsmart_enhanced_hh_size,
+         enh_tsmart_enhanced_hh_num_males,
+         enh_tsmart_enhanced_hh_num_females,
+         enh_tsmart_enhanced_hh_num_registered,
+         enh_tsmart_enhanced_hh_num_unregistered,
+         enh_tsmart_enhanced_hh_num_dems,
+         enh_tsmart_enhanced_hh_num_reps,
+         enh_tsmart_enhanced_hh_num_others,
+         assignment,
+         Qfav_flipped_continous,
+         Qfav
+         ) %>%
+  filter(complete.cases(.)) %>%
+  mutate_if(is.character, as.factor)
+
+feature_train <- mod_df %>% 
+  select(-c(assignment, Qfav_flipped_continous, Qfav))
+w_train <- if_else(mod_df$assignment == "control", 0, 1)
+yobs_train <- mod_df$Qfav_flipped_continous
+
+# create the hte object using honest Random Forests (RF)
+xl_rf <- X_RF(feat = feature_train, tr = w_train, yobs = yobs_train)
 ```
 
-Republicans unfav increases
-```{r}
-combined_weighted %>%
-  filter(dem==0) %>%
-  mutate(fav_model = if_else(Qfav %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0)) %>%
-  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
-  summary()
-```
+```{r predictions}
+cate_esti_rf <- EstimateCate(xl_rf, select(mod_df, -c(assignment, Qfav_flipped_continous, Qfav)))
 
-# Dem fav decreases, not significant
+mod_df$cate <- cate_esti_rf
 
-```{r}
-combined_weighted %>%
-  filter(dem==1) %>%
-  mutate(fav_model = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>%
-  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
-  summary()
-```
-
-# Dem Unfav decreases, not significant
-
-```{r}
-combined_weighted %>%
-  filter(dem==1) %>%
-  mutate(fav_model = if_else(Qfav %in% c("Strongly Unfavorable", "Somewhat Unfavorable"), 1, 0)) %>%
-  glm(formula = fav_model~assignment, family = "binomial", weights = weight) %>%
-  summary()
-```
-
-# dems don't change with continous outcome
-
-```{r}
-combined_weighted %>%
-  filter(dem==1) %>%
-  lm(formula = Qfav_flipped_continous~assignment, weights = weight) %>%
-  summary()
-```
-
-# republicans move towards unfav with continous outcome
-
-```{r}
-combined_weighted %>%
-  filter(dem==0) %>%
-  lm(formula = Qfav_flipped_continous~assignment, weights = weight) %>%
-  summary()
-```
-
-
-combined_weighted %>%
-  filter(dem == 0) %>%
-  select(Qfav,Qfav_flipped_continous) %>%
+mod_df %>%
+  mutate(cate_cat = cut(cate, breaks = quantile(cate, probs = c(0,.3, .6, 1)), include.lowest = T)) %>%
+  select(Qfav_flipped_continous, assignment, cate_cat) %>%
   table()
-
-# we decrease favorability from republicans
-
   
-# Trying mixed model for MRP
-mixed.lmer <- combined_weighted %>%
-  mutate(fav_model = as.factor(if_else(Qfav_flipped %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0))) %>%
-  glmer(formula = fav_model ~ assignment + college + vb_voterbase_gender + (1|vb_tsmart_state) + (1|dem), family = "binomial")
-
-summary(mixed.lmer)
-
-predict(mixed.lmer, 
-        randomized_dat %>% mutate(assignment="treatment"), 
-        type = "response",
-        allow.new.levels=T) %>% 
-  mean()
-
-combined_weighted %>% 
-  #filter(state == "MI", vb_tsmart_hd==71) %>% 
-  mutate(outcome = if_else(Qfav %in% c("Strongly Favorable", "Somewhat Favorable"), 1, 0)) %>% 
-  group_by(state) %>%
-  summarize(mn = mean(outcome))
-            pull(outcome) %>% 
-  mean()
-  
-# Michigan model
-```{r}
-issue_df %>%
-  filter(state =="AZ") %>%
-  mutate(Qissue_model = if_else(Q5 < 3, 1, 0)) %>% 
-  lm(formula = Qissue_model~assignment, weights = weight) %>%
-  summary()
 ```
 
