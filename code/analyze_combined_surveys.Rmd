@@ -672,27 +672,41 @@ The model used 66 predictor variables. These include basic demographic data from
 
 The X-learner was trained using six-fold cross-validation, with CATEs calculated for each fold using the model built on the rest of the dataset. This technique is designed to reduce overfitting.
 
+
+#### Model Results
 ```{r reload_scored_df, include = FALSE}
 #### If this fails, you need to run this markdown up to the chunk above, which saves the mod_df file and then run `build_XRF_model.R` which builds the random forest using X-learner and saves the df_with_cates.Rds file.
 
 cate_df <- readRDS(file = here("output", "df_with_cates.Rds"))
 ```
 
-```{r, echo = FALSE}
-# Graph Effects by Cate ---------------------------------------------------
-cate_df %>%
+```{r, include = FALSE}
+cate_graph_df <- cate_df %>%
   mutate(unfav = as.factor(if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0))) %>%
   mutate(cate_cat = cut(cate, 
-                        breaks = quantile(cate, probs = c(0,.2, .7, 1)), 
+                        breaks = quantile(cate, probs = c(0, 0.75, 1)), 
                         include.lowest = T, 
-                        labels = c("Low", "mid", "High"))) %>%
+                        labels = c("Low", "High"))) %>%
   select(unfav, assignment, cate_cat) %>%
-  filter(cate_cat != "mid") %>%
-  #unite(col = cate_assignment, cate_cat, assignment) %>%
   group_by(cate_cat, assignment, unfav) %>%
   summarise(n = n()) %>%
   mutate(freq = n / sum(n)) %>%
-  filter(unfav==1) %>%
+  filter(unfav==1)
+
+
+low_control <- cate_graph_df$freq[cate_graph_df$cate_cat=="Low" & cate_graph_df$assignment=="control"]
+high_control <- cate_graph_df$freq[cate_graph_df$cate_cat=="High" & cate_graph_df$assignment=="control"]
+low_treatment <- cate_graph_df$freq[cate_graph_df$cate_cat=="Low" & cate_graph_df$assignment=="treatment"]
+high_treatment <- cate_graph_df$freq[cate_graph_df$cate_cat=="High" & cate_graph_df$assignment=="treatment"]
+
+cate_graph_effect <- (high_treatment - high_control) - (low_treatment - low_control)
+cate_graph_effect <- round(cate_graph_effect*100, digits = 1)
+```
+
+The primary way of evaluating the model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest CATE scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high CATE scores. The effect in the high group was `r cate_graph_effect` percentage points higher than the effect in the low group. This difference can be considered the "boost" in program effectiveness from using the score.
+
+```{r, echo = FALSE}
+cate_graph_df %>%
   ggplot(aes(x=cate_cat, y=freq, fill = assignment)) +
   geom_bar(stat="identity", position="dodge") +
   theme_minimal() +
@@ -702,30 +716,7 @@ cate_df %>%
   theme(legend.title = element_blank())
 ```
 
-```{r, include=FALSE}
-cate_df %>%
-  mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
-  mutate(nm_cat = cut(nm_score, 
-                        breaks = quantile(nm_score, probs = c(0,.2, .7, 1)), 
-                        include.lowest = T, 
-                        labels = c("low_nm", "mid", "high_nm"))) %>%
-  select(Qfav_flipped_continous, assignment, nm_cat, dem) %>%
-  filter(nm_cat != "mid") %>%
-  unite(col = nm_assignment, nm_cat, assignment) %>%
-  group_by(nm_assignment, Qfav_flipped_continous) %>%
-  summarise(n = n()) %>%
-  mutate(freq = n / sum(n)) %>%
-  ggplot(aes(x=nm_assignment, y=freq, fill = Qfav_flipped_continous)) +
-  geom_bar(stat="identity") +
-  theme_minimal() +
-  coord_flip() 
-
-cate_df %>%
-  mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
-  glm(formula = unfav~ cate*assignment, family = "binomial") %>%
-  summary()
-
-
+```{r make_score_effect_df, include = F}
 score_effect_df <- tibble(cutoff = seq(.01, .99, .01),
                           nm_score_effect = NA,
                           cate_score_effect = NA,
@@ -788,7 +779,13 @@ for (percentile_cutoff in score_effect_df$cutoff) {
       pull(score_effect)
   }
 }
+```
 
+The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead, we can examine what the boost in program effectiveness would be for using _any_ percentile cutoff. The following graph shows that for the CATE scores as well as the New Middle Scores and the TicketSplitter scores. 
+
+The lines get more unstable, and less accurate towards the left and right sides of the graph, because in those cases either the "high" or the "low" group as a very small sample size. However towards the middle of the chart, there is a fairly clear trend showing the CATE model outperforming TicketSplitter, while the New Middle model hovers around zero indicating that it does not help at all.
+
+```{r, echo = FALSE, fig.height=3}
 score_effect_df %>%
   mutate(cutoff = cutoff*100) %>%
   rename(`New Middle` = "nm_score_effect",
@@ -796,11 +793,42 @@ score_effect_df %>%
          CATE = "cate_score_effect") %>%
   gather(score, effect, `New Middle`:TicketSplitter) %>%
   ggplot(aes(x=cutoff, y = effect, color = score)) +
+  geom_hline(yintercept = 0, color='darkgrey') +
   geom_line(size=1) +
   theme_minimal() +
-  labs(y = "Boost From Using Score",
+  labs(y = "Boost From Using Score (pp)",
        x = "Score Percentile Cutoff") +
   theme(legend.title = element_blank()) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+#### Conclusion
+
+## Summary
+
+## Recomendations
+
+```{r, include=FALSE}
+cate_df %>%
+  mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
+  mutate(nm_cat = cut(nm_score, 
+                        breaks = quantile(nm_score, probs = c(0,.75, 1)), 
+                        include.lowest = T, 
+                        labels = c("low_nm", "high_nm"))) %>%
+  select(Qfav_flipped_continous, assignment, nm_cat, dem) %>%
+  filter(nm_cat != "mid") %>%
+  unite(col = nm_assignment, nm_cat, assignment) %>%
+  group_by(nm_assignment, Qfav_flipped_continous) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=nm_assignment, y=freq, fill = Qfav_flipped_continous)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  coord_flip() 
+
+cate_df %>%
+  mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
+  glm(formula = unfav~ cate*assignment, family = "binomial") %>%
+  summary()
 ```
 
