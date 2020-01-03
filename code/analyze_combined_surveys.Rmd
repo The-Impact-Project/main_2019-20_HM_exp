@@ -339,7 +339,7 @@ combined_weighted %>%
 
 To further examine our effect on favorable and unfavorable ratings, the following plot shows the effect broken down by state, and further broken out into Republican-held and Democrat-held districts. The effect on unfavorable ratings in Florida and Arizona are both significant for Republican districts. The remaining states did not show significant changes. Positive numbers (bars above the 0% line) indicate we increased the number of people given that rating. The grey error bars signifiy 95% confidence intervals. So, for example, in the Republican districts in Michigan, we increased favorable ratings by 4% and decreased unfavorable ratings by 2%.
 
-```{r effect_by_electeds_party_and_state, echo=F, fig.height=3.5}
+```{r effect_by_electeds_party_and_state, echo=F, fig.height=3}
 combined_weighted %>%
   select(state, dem, assignment, favorable, unfavorable, weight) %>%
   gather(fav_unfav, response, favorable:unfavorable) %>%
@@ -381,7 +381,7 @@ Each state's survey included a question to evaluate our program's impact on vote
 
 >•	Ensuring big corporations and the wealthy pay their fair share so we can invest in schools, roads, and infrastructure, and expand access to affordable health care
 
-```{r approach_graph, echo=FALSE, fig.height=2.5}
+```{r approach_graph, echo=FALSE, fig.height=2}
 combined_weighted %>%
   mutate(Qapproach = fct_collapse(Qapproach, "Both/DK/Something else" = c("Both", "Don't Know", "Something else"))) %>%
   group_by(assignment, Qapproach) %>%
@@ -705,7 +705,7 @@ cate_graph_effect <- round(cate_graph_effect*100, digits = 1)
 
 The primary way of evaluating the model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest CATE scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high CATE scores. The effect in the high group was `r cate_graph_effect` percentage points higher than the effect in the low group. This difference can be considered the "boost" in program effectiveness from using the score.
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, fig.height=3}
 cate_graph_df %>%
   ggplot(aes(x=cate_cat, y=freq, fill = assignment)) +
   geom_bar(stat="identity", position="dodge") +
@@ -785,7 +785,7 @@ The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead
 
 The lines get more unstable, and less accurate towards the left and right sides of the graph, because in those cases either the "high" or the "low" group as a very small sample size. However towards the middle of the chart, there is a fairly clear trend showing the CATE model outperforming TicketSplitter, while the New Middle model hovers around zero indicating that it does not help at all.
 
-```{r, echo = FALSE, fig.height=3}
+```{r, echo = FALSE, warning = FALSE, fig.height=3}
 score_effect_df %>%
   mutate(cutoff = cutoff*100) %>%
   rename(`New Middle` = "nm_score_effect",
@@ -802,11 +802,11 @@ score_effect_df %>%
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))
 ```
 
-#### Conclusion
+## Conclusion
 
-## Summary
+#### Summary
 
-## Recomendations
+#### Recommendations
 
 ```{r, include=FALSE}
 cate_df %>%
