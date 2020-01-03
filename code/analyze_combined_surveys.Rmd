@@ -675,12 +675,12 @@ The X-learner was trained using six-fold cross-validation, with CATEs calculated
 ```{r reload_scored_df, include = FALSE}
 #### If this fails, you need to run this markdown up to the chunk above, which saves the mod_df file and then run `build_XRF_model.R` which builds the random forest using X-learner and saves the df_with_cates.Rds file.
 
-cate_df <- readRDS(object = mod_df, file = here("output", "df_with_cates.Rds"))
+cate_df <- readRDS(file = here("output", "df_with_cates.Rds"))
 ```
 
 ```{r, echo = FALSE}
 # Graph Effects by Cate ---------------------------------------------------
-mod_df %>%
+cate_df %>%
   mutate(unfav = as.factor(if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0))) %>%
   mutate(cate_cat = cut(cate, 
                         breaks = quantile(cate, probs = c(0,.2, .7, 1)), 
@@ -698,11 +698,12 @@ mod_df %>%
   theme_minimal() +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   labs(y = "Unfavorable %", 
-       x = "CATE Score")
+       x = "CATE Score") +
+  theme(legend.title = element_blank())
 ```
 
-```{r}
-mod_df %>%
+```{r, include=FALSE}
+cate_df %>%
   mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
   mutate(nm_cat = cut(nm_score, 
                         breaks = quantile(nm_score, probs = c(0,.2, .7, 1)), 
@@ -717,9 +718,9 @@ mod_df %>%
   ggplot(aes(x=nm_assignment, y=freq, fill = Qfav_flipped_continous)) +
   geom_bar(stat="identity") +
   theme_minimal() +
-  coord_flip()
+  coord_flip() 
 
-mod_df %>%
+cate_df %>%
   mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
   glm(formula = unfav~ cate*assignment, family = "binomial") %>%
   summary()
@@ -733,7 +734,7 @@ score_effect_df <- tibble(cutoff = seq(.01, .99, .01),
 for (percentile_cutoff in score_effect_df$cutoff) {
   print(percentile_cutoff)
   
-  score_effect_df$nm_score_effect[score_effect_df$cutoff == percentile_cutoff] <- mod_df %>%
+  score_effect_df$nm_score_effect[score_effect_df$cutoff == percentile_cutoff] <- cate_df %>%
     mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
     mutate(nm_cat = cut(nm_score, 
                         breaks = quantile(nm_score, probs = c(0, percentile_cutoff, 1)), 
@@ -750,7 +751,7 @@ for (percentile_cutoff in score_effect_df$cutoff) {
     mutate(score_effect = (high_treatment - high_control) - (low_treatment - low_control)) %>%
     pull(score_effect)
   
-  score_effect_df$cate_score_effect[score_effect_df$cutoff == percentile_cutoff] <- mod_df %>%
+  score_effect_df$cate_score_effect[score_effect_df$cutoff == percentile_cutoff] <- cate_df %>%
     mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
     mutate(cate_cat = cut(cate, 
                         breaks = quantile(cate, probs = c(0, percentile_cutoff, 1)), 
@@ -767,9 +768,9 @@ for (percentile_cutoff in score_effect_df$cutoff) {
     mutate(score_effect = (high_treatment - high_control) - (low_treatment - low_control)) %>%
     pull(score_effect)
   
-  if (percentile_cutoff > (sum(mod_df$ts_score == 0) / nrow(mod_df)) &
-      percentile_cutoff < (sum(mod_df$ts_score < 100) / nrow(mod_df))) {
-    score_effect_df$ts_score_effect[score_effect_df$cutoff == percentile_cutoff] <- mod_df %>%
+  if (percentile_cutoff > (sum(cate_df$ts_score == 0) / nrow(cate_df)) &
+      percentile_cutoff < (sum(cate_df$ts_score < 100) / nrow(cate_df))) {
+    score_effect_df$ts_score_effect[score_effect_df$cutoff == percentile_cutoff] <- cate_df %>%
       mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
       mutate(ts_cat = cut(ts_score, 
                           breaks = quantile(ts_score, probs = c(0, percentile_cutoff, 1)), 
