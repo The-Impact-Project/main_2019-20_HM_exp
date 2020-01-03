@@ -567,10 +567,6 @@ nm_ts_dat %>%
   theme_minimal()
 ```
 
-## Modeling
-
-
-
 ```{r, include = FALSE}
 mod_df <- combined_weighted %>%
            mutate(threeway_party = if_else(vb_vf_party == "Democrat", "Democrat", 
@@ -664,48 +660,48 @@ mod_df <- combined_weighted %>%
 saveRDS(object = mod_df, file = here("output", "model_df.Rds"))
 ```
 
+## Modeling
+
+For the final step of this analysis, I built a new model to see how it would compare to the existing models that we had used to target. This model focused only on Republican-held districts, and is built to predict which voters would be more likely to hold unfavorable opinions after receiving treatment from TIP.
+
+#### Technical Details
+
+The model was built on a binary outcome where giving an unfavorable rating is the positive response, and giving no rating, or a favorable rating is a negative response. The model was built in R with an X-learner, using a random forest as the base algorithm. This used the [causalToolbox package](https://github.com/soerenkuenzel/causalToolbox); there is more information on X-learners generally [here](https://arxiv.org/pdf/1706.03461.pdf). The X-learner meta-algorithm is designed to model heterogenous treatment effects, and it produces conditional average treatment effects (CATEs) which are the estimated average treatment effect within specifics subpopulations.
+
+The model used 66 predictor variables. These include basic demographic data from the voter file such as party, race, gender, education, age, and years since registration. It also uses 26 of the TargetSmart scores as inputs; these model support for various issues, as well as turnout, partisanship, and religion. The remaining inputs were various PredictWise scores, household-level variables (such as number of registered voters in the household), and the New Middle Score.
+
+The X-learner was trained using six-fold cross-validation, with CATEs calculated for each fold using the model built on the rest of the dataset. This technique is designed to reduce overfitting.
+
 ```{r reload_scored_df, include = FALSE}
 #### If this fails, you need to run this markdown up to the chunk above, which saves the mod_df file and then run `build_XRF_model.R` which builds the random forest using X-learner and saves the df_with_cates.Rds file.
 
 cate_df <- readRDS(object = mod_df, file = here("output", "df_with_cates.Rds"))
 ```
 
-https://github.com/soerenkuenzel/causalToolbox
-https://arxiv.org/pdf/1706.03461.pdf
-
-
-```{r, include = FALSE}
-# Print Table of Cate Outputs ---------------------------------------------
-mod_df %>%
-  mutate(cate_cat = cut(cate, 
-                        breaks = quantile(cate, probs = c(0,.2, .8, 1)),
-                        labels = c("low", "mid", "high"),
-                        include.lowest = T)) %>%
-  filter(cate_cat == "low") %>%
-  select(Qfav_flipped_continous, assignment) %>%
-  table() %>%
-  prop.table(margin=2) %>%
-  round(digits = 3)
-
-
+```{r, echo = FALSE}
 # Graph Effects by Cate ---------------------------------------------------
 mod_df %>%
-  mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
+  mutate(unfav = as.factor(if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0))) %>%
   mutate(cate_cat = cut(cate, 
                         breaks = quantile(cate, probs = c(0,.2, .7, 1)), 
                         include.lowest = T, 
-                        labels = c("low_cate", "mid", "high_cate"))) %>%
-  select(Qfav_flipped_continous, assignment, cate_cat) %>%
+                        labels = c("Low", "mid", "High"))) %>%
+  select(unfav, assignment, cate_cat) %>%
   filter(cate_cat != "mid") %>%
-  unite(col = cate_assignment, cate_cat, assignment) %>%
-  group_by(cate_assignment, Qfav_flipped_continous) %>%
+  #unite(col = cate_assignment, cate_cat, assignment) %>%
+  group_by(cate_cat, assignment, unfav) %>%
   summarise(n = n()) %>%
   mutate(freq = n / sum(n)) %>%
-  ggplot(aes(x=cate_assignment, y=freq, fill = Qfav_flipped_continous)) +
-  geom_bar(stat="identity") +
+  filter(unfav==1) %>%
+  ggplot(aes(x=cate_cat, y=freq, fill = assignment)) +
+  geom_bar(stat="identity", position="dodge") +
   theme_minimal() +
-  coord_flip()
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(y = "Unfavorable %", 
+       x = "CATE Score")
+```
 
+```{r}
 mod_df %>%
   mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
   mutate(nm_cat = cut(nm_score, 
