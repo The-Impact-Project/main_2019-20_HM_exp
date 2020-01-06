@@ -30,7 +30,8 @@ non_feature_vars <- c("assignment",
                       "fold", 
                       "cate", 
                       "ts_score",
-                      "vb_voterbase_id")
+                      "vb_voterbase_id",
+                      "weight")
 
 for (this_fold in 1:folds) {
   
