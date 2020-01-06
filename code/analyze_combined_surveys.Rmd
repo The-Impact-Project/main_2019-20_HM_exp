@@ -1,7 +1,7 @@
 ---
-title: "DRAFT Fall 2019 H&M Experiment"
+title: "[DRAFT] Fall 2019 H&M Experiment"
 author: "Andy Zack"
-date: "12/20/2019"
+date: "1/6/2020"
 output: pdf_document
 ---
 
@@ -841,7 +841,51 @@ score_effect_df %>%
 
 #### Demographics of High-CATE Audience
 
-[need to add this]
+The following set of tables breaks the survey respondents down into three equal sized groups based on CATE scores. These tables are unweighted, and represent survey respondents, _not_ the entire population from the voterfile. That can be added later to replace these tables.
+
+```{r, echo = FALSE}
+cate_df %>%
+  mutate(age_cat = cut(vb_voterbase_age, breaks = c(17, 50, 65, 75, 101))) %>%
+  demo_table(var = age_cat, output_name = "Age") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+cate_df %>%
+  demo_table(var = vb_voterbase_gender, output_name = "Gender") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+cate_df %>%
+  mutate(college = if_else(college==0, "Non-College", "College")) %>%
+  demo_table(var = college, output_name = "College") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+cate_df %>%
+  demo_table(var = threeway_party, output_name = "Party-Registration") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+cate_df %>%
+  demo_table(var = threeway_race, output_name = "Race") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+cate_df %>%
+  mutate(racegender = if_else(threeway_race == "Caucasian" & vb_voterbase_gender == "Female", "White Women",
+                              if_else(threeway_race != "Caucasian" & vb_voterbase_gender == "Female", "Women of Color",
+                                      if_else(threeway_race=="Caucasian" & vb_voterbase_gender== "Male", "White Men", "Men of Color")))) %>%
+  demo_table(var=racegender, output_name = "Race/Gender") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+```
 
 ## Conclusion
 
@@ -856,9 +900,12 @@ In terms of modeling persuasion. The TicketSplitter model appears to be somewhat
 
 #### Recommendations
 
+First, we should check how these results compare to previous programs where we contacted folks in both Republican and Democratic districts, but these results strongly suggest focusing our programs in Republican-held districts since we seem to be able to make more of an impact there. 
+
+Secondly, I suggest using this new model, either alone or in conjunction with other targeting criteria to determine our audiences for the 2020 hearts and minds programs. I have not yet scored the entire voter file in our targeted districts using this model. Once that happens, we can see how the scores are distributed among likely voters in each of our districts and the demographics of the audiences in each place.
 
 
-```{r, include=FALSE}
+```{r, include = FALSE}
 cate_df %>%
   mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
   mutate(nm_cat = cut(nm_score, 
