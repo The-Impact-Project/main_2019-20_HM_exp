@@ -19,6 +19,32 @@ library(kableExtra)
 library(causalToolbox)
 ```
 
+
+```{r targeting_function, include = FALSE}
+roundpercent <- function(num) {scales::percent(num, accuracy = 1)}
+
+demo_table <- function(data, var, output_name) {
+  group_var <- enquo(var) 
+  output_name <- enquo(output_name)
+  
+  data %>%
+    mutate(cate_cut = cut(cate, 
+                          breaks = quantile(cate_df$cate, c(0, 0.3, 0.6, 1)), 
+                          include.lowest = TRUE,
+                          labels = c('Low', 'Mid', 'High'))) %>%
+    group_by(cate_cut, !! group_var) %>%
+    summarize(n = n()) %>%
+    mutate(freq = n / sum(n)) %>%
+    ungroup() %>%
+    select(-n) %>%
+    spread(cate_cut, freq) %>%
+    filter(!is.na(!! group_var)) %>%
+    mutate_if(is.numeric, roundpercent) %>%
+    rename(!!output_name := !! group_var) %>%
+    return()
+}
+```
+
 ```{r load_data, echo = F, message=F, warning=F}
 raw_az <- read_csv(here("data", "AZ_RETURN.txt")) %>%
   filter(FDISP=="01") %>%
@@ -582,6 +608,7 @@ mod_df <- combined_weighted %>%
     mutate(ts_score = ifelse(is.na(catalistmodel_ticket_splitter), 0, catalistmodel_ticket_splitter)) %>%
   select(vb_voterbase_id,
          dem,
+         weight,
          threeway_party,
          threeway_race,
          mixed_party_hh,
@@ -699,11 +726,14 @@ high_control <- cate_graph_df$freq[cate_graph_df$cate_cat=="High" & cate_graph_d
 low_treatment <- cate_graph_df$freq[cate_graph_df$cate_cat=="Low" & cate_graph_df$assignment=="treatment"]
 high_treatment <- cate_graph_df$freq[cate_graph_df$cate_cat=="High" & cate_graph_df$assignment=="treatment"]
 
-cate_graph_effect <- (high_treatment - high_control) - (low_treatment - low_control)
-cate_graph_effect <- round(cate_graph_effect*100, digits = 1)
+cate_high_effect <- high_treatment - high_control
+cate_low_effect <- low_treatment - low_control
+
+cate_high_effect <- round(cate_high_effect*100, digits = 1)
+cate_low_effect <- round(cate_low_effect*100, digits = 1)
 ```
 
-The primary way of evaluating the model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest CATE scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high CATE scores. The effect in the high group was `r cate_graph_effect` percentage points higher than the effect in the low group. This difference can be considered the "boost" in program effectiveness from using the score.
+The primary way of evaluating the model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest CATE scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high CATE scores. The effect in the high group was `r cate_high_effect` percentage points, and the effect in the low group was `r cate_low_effect`.
 
 ```{r, echo = FALSE, fig.height=3}
 cate_graph_df %>%
@@ -717,6 +747,9 @@ cate_graph_df %>%
 ```
 
 ```{r make_score_effect_df, include = F}
+#### here I should adjust the summarize/mutate lines to make the results weighted.
+
+
 score_effect_df <- tibble(cutoff = seq(.01, .99, .01),
                           nm_score_effect = NA,
                           cate_score_effect = NA,
@@ -739,7 +772,7 @@ for (percentile_cutoff in score_effect_df$cutoff) {
     filter(unfav==1) %>%
     select(-c(n, unfav)) %>%
     spread(nm_assignment, freq) %>%
-    mutate(score_effect = (high_treatment - high_control) - (low_treatment - low_control)) %>%
+    mutate(score_effect = high_treatment - high_control) %>%
     pull(score_effect)
   
   score_effect_df$cate_score_effect[score_effect_df$cutoff == percentile_cutoff] <- cate_df %>%
@@ -756,7 +789,7 @@ for (percentile_cutoff in score_effect_df$cutoff) {
     filter(unfav==1) %>%
     select(-c(n, unfav)) %>%
     spread(cate_assignment, freq) %>%
-    mutate(score_effect = (high_treatment - high_control) - (low_treatment - low_control)) %>%
+    mutate(score_effect = high_treatment - high_control) %>%
     pull(score_effect)
   
   if (percentile_cutoff > (sum(cate_df$ts_score == 0) / nrow(cate_df)) &
@@ -775,15 +808,15 @@ for (percentile_cutoff in score_effect_df$cutoff) {
       filter(unfav==1) %>%
       select(-c(n, unfav)) %>%
       spread(ts_assignment, freq) %>%
-      mutate(score_effect = (high_treatment - high_control) - (low_treatment - low_control)) %>%
+    mutate(score_effect = high_treatment - high_control) %>%
       pull(score_effect)
   }
 }
 ```
 
-The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead, we can examine what the boost in program effectiveness would be for using _any_ percentile cutoff. The following graph shows that for the CATE scores as well as the New Middle Scores and the TicketSplitter scores. 
+The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead, we can examine how effective the program  would be for using _any_ percentile cutoff. The following graph shows that for the CATE scores as well as the New Middle Scores and the TicketSplitter scores. 
 
-The lines get more unstable, and less accurate towards the left and right sides of the graph, because in those cases either the "high" or the "low" group as a very small sample size. However towards the middle of the chart, there is a fairly clear trend showing the CATE model outperforming TicketSplitter, while the New Middle model hovers around zero indicating that it does not help at all.
+The lines get more unstable, and slightly less accurate towards the right sides of the graph, because in those cases the targeted group has a very small sample size. However there is still a fairly clear trend showing the CATE model outperforming the other two models. The dashed line indicates the overall effect of the program in Republican-held districts. This is what we'd expect the effect to be using the fairly broad targeting that we used in the Fall program. Ideally, any model would increase the effectiveness of the program, so the models should all be above the dashed line, and they should increase towards the right side of the graph, indicating that the programs become more effective as we limit the audience to the best targets. The following graph clearly shows that this is the case for the CATE model, but not the other two.
 
 ```{r, echo = FALSE, warning = FALSE, fig.height=3}
 score_effect_df %>%
@@ -793,20 +826,37 @@ score_effect_df %>%
          CATE = "cate_score_effect") %>%
   gather(score, effect, `New Middle`:TicketSplitter) %>%
   ggplot(aes(x=cutoff, y = effect, color = score)) +
-  geom_hline(yintercept = 0, color='darkgrey') +
+  geom_hline(yintercept = 0, 
+             color='darkgrey') +
+  geom_hline(yintercept = score_effect_df$nm_score_effect[1],
+             color='grey', 
+             linetype=2) +
   geom_line(size=1) +
   theme_minimal() +
-  labs(y = "Boost From Using Score (pp)",
+  labs(y = "Program Effect (pp)",
        x = "Score Percentile Cutoff") +
   theme(legend.title = element_blank()) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))
 ```
 
+#### Demographics of High-CATE Audience
+
+[need to add this]
+
 ## Conclusion
 
 #### Summary
 
+The Fall Hearts and Minds program did not have a measurable effect on voters’ issue opinions, but it did significantly affect awareness and their opinions of their legislators. This effect was seen most strongly in districts where the elected officials are Republicans.
+
+The program also had a significant effect on mail recall, but even in the treatment group, the recall percentage was low. We did not appear to move voters’ overall opinion on their states’ general approach to governing.
+
+In terms of modeling persuasion. The TicketSplitter model appears to be somewhat helpful, but a custom model for our programs may outperform it.
+
+
 #### Recommendations
+
+
 
 ```{r, include=FALSE}
 cate_df %>%
@@ -831,4 +881,6 @@ cate_df %>%
   glm(formula = unfav~ cate*assignment, family = "binomial") %>%
   summary()
 ```
+
+
 
