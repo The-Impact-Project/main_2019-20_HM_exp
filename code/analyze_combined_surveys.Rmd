@@ -218,14 +218,49 @@ combined_weighted <- combined_weighted %>%
   select(-catalistmodel_ticket_splitter) %>%
   left_join(ts_scores)
 
-remove(ids, query, ts_scores)
+#remove(ids, query, ts_scores)
 ```
 
 ## Summary
 
-In November and December, 2019 we ran Hearts and Minds programs across a handful of legislative districts in five states. These programs were followed by a live-interviewer telephone survey designed to evaluate the effects of these programs. The survey included questions about name-ID of their elected officials, favorability ratings of these same officials, issue support of key issues in each state, recall of the mail portion of each program, and one question about their views on the overall approach of government.
+In November and December, 2019 our grantees ran Hearts and Minds programs across a handful of legislative districts in five states to educate working and middle class people about economic issues that impact their lives and to connect them to the conversation happening about these issues in state Capitols. These programs were followed by a live-interviewer telephone survey designed to evaluate the effects of these programs. The survey included questions about name-ID of their elected officials, favorability ratings of these same officials, issue support of key issues in each state, recall of the mail portion of each program, and one question about their views on the overall approach of government.
 
-Within each state, we held out a control group that also recieved the phone survey in order to compare the survey results. There were `r nrow(raw_combined)` completed surveys. After filtering out surveys where the age or gender of the respondent did not match the voter file, we ended up with `r nrow(combined_weighted)` surveys in the experiment. The following table shows the breakdown of responses by state and treatment group.
+#### Key Results
+
+```{r, include = F}
+overall_fav_effect <- combined_weighted %>%
+  filter(dem==0) %>%
+  group_by(assignment, Q3) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>% 
+  filter(Q3==2) %>% 
+  ungroup() %>% 
+  select(assignment, freq) %>% 
+  spread(assignment, freq) %>% 
+  mutate(effect = 100* (treatment - control)) %>% 
+  pull(effect) %>% 
+  round(digits = 1)
+```
+
+* The program caused a `r overall_fav_effect` percentage point increase in unfavorable ratings in Republican-held districts. There was little movement in Democrat-held districts.
+
+* The program caused a small increase in voters' ability to rate their legislators.
+
+* There was not a measurable effect on voters’ issue opinions in most states. However, in Michigan, we were able to increase support for the overtime policy.
+
+* The program also had a significant effect on mail recall, but even in the treatment group, the recall percentage was low. We did not appear to move voters’ overall opinion on their states’ general approach to governing.
+
+* In terms of modeling persuasion. The TicketSplitter model appears to be somewhat helpful, but a custom model for our programs may outperform it.
+
+#### Recommendations
+
+First, we should check how these results compare to previous programs where we contacted folks in both Republican and Democratic districts, but these results strongly suggest focusing our programs in Republican-held districts since we seem to be able to make more of an impact there. 
+
+Secondly, I suggest using this new model, either alone or in conjunction with other targeting criteria to determine our audiences for the 2020 hearts and minds programs. I have not yet scored the entire voter file in our targeted districts using this model. Once that happens, we can see how the scores are distributed among likely voters in each of our districts and the demographics of the audiences in each place.
+
+## Survey and Experimental Design
+
+Within each state, we held out a control group that also recieved the phone survey in order to compare the survey results. There were `r nrow(raw_combined)` completed surveys. We filtered out surveys where the age or gender of the respondent did not match the voter file to help ensure that we interviewed the person we were trying to contact. After this filter was applied, we ended up with `r nrow(combined_weighted)` surveys in the experiment. The following table shows the breakdown of responses by state and treatment group.
 
 The data was weighted by treatment assignment, education, gender, and legislative district, with weights trimmed at 1/3 and 3.
 
@@ -295,7 +330,7 @@ combined_weighted %>%
 
 ## Favorability
 
-Our programs' impact on elected's favorability ratings varies between Republican-held and Democrat-held districts. For this next section, the analysis is seperated into these two groups due to this difference.
+The survey asked respondents to rate the favorability of their elected official as an indicator of whether they truly knew who represented them at the Capitol. Our programs' impact on elected's favorability ratings varies between Republican-held and Democrat-held districts. For this next section, the analysis is separated into these two groups due to this difference.
 
 The effect on favorablity is evaluated in three ways. The first two treat favorability as a _binary_ outcome, while the third treats it as a _continuous_ outcome.
 
@@ -556,7 +591,7 @@ summary_nm_ts_table <- nm_ts_dat %>%
   summarise(n = n()) 
 ```
 
-In Arizona, Maine, and Michigan, we targeted people who either had a high TicketSplitter score, or a high New Middle score. TicketSplitter is a score created by Catalist that is designed to identify people who are likely to split their ballots. The New Middle scores were created by Benenson and are designed to identify people with mixed views on economic policies. Both are being used here as proxies for persuadability on our core issues.
+In Arizona, Maine, and Michigan, we targeted people who either had a high TicketSplitter score, or a high New Middle score. TicketSplitter is a score created by Catalist that is designed to identify people who are likely to split their ballots. The New Middle scores were created by Benenson and are designed to identify people who care deeply about economic issues, but don't respond to traditional progressive messaging. Both are being used here as proxies for persuadability on our core issues.
 
 Different New Middle score cutoffs were used in pulling audiences for the different states based on the needs of each state's program. For the purposes of this analysis, I am considering anyone with a score above 33 as New Middle. This roughly corresponds to the 30% of people with the highest New Middle scores.
 
@@ -747,8 +782,6 @@ cate_graph_df %>%
 ```
 
 ```{r make_score_effect_df, include = F}
-#### here I should adjust the summarize/mutate lines to make the results weighted.
-
 
 score_effect_df <- tibble(cutoff = seq(.01, .99, .01),
                           nm_score_effect = NA,
@@ -764,10 +797,10 @@ for (percentile_cutoff in score_effect_df$cutoff) {
                         breaks = quantile(nm_score, probs = c(0, percentile_cutoff, 1)), 
                         include.lowest = T, 
                         labels = c("low","high"))) %>%
-    select(unfav, assignment, nm_cat) %>%
+    select(unfav, assignment, nm_cat, weight) %>%
     unite(col = nm_assignment, nm_cat, assignment) %>%
     group_by(nm_assignment, unfav) %>%
-    summarise(n = n()) %>%
+    summarise(n = sum(weight)) %>%
     mutate(freq = n / sum(n)) %>%
     filter(unfav==1) %>%
     select(-c(n, unfav)) %>%
@@ -781,10 +814,10 @@ for (percentile_cutoff in score_effect_df$cutoff) {
                         breaks = quantile(cate, probs = c(0, percentile_cutoff, 1)), 
                         include.lowest = T, 
                         labels = c("low","high"))) %>%
-    select(unfav, assignment, cate_cat) %>%
+    select(unfav, assignment, cate_cat, weight) %>%
     unite(col = cate_assignment, cate_cat, assignment) %>%
     group_by(cate_assignment, unfav) %>%
-    summarise(n = n()) %>%
+    summarise(n = sum(weight)) %>%
     mutate(freq = n / sum(n)) %>%
     filter(unfav==1) %>%
     select(-c(n, unfav)) %>%
@@ -800,10 +833,10 @@ for (percentile_cutoff in score_effect_df$cutoff) {
                           breaks = quantile(ts_score, probs = c(0, percentile_cutoff, 1)), 
                           include.lowest = T, 
                           labels = c("low","high"))) %>%
-      select(unfav, assignment, ts_cat) %>%
+      select(unfav, assignment, ts_cat, weight) %>%
       unite(col = ts_assignment, ts_cat, assignment) %>%
       group_by(ts_assignment, unfav) %>%
-      summarise(n = n()) %>%
+      summarise(n = sum(weight)) %>%
       mutate(freq = n / sum(n)) %>%
       filter(unfav==1) %>%
       select(-c(n, unfav)) %>%
@@ -887,24 +920,6 @@ cate_df %>%
 
 ```
 
-## Conclusion
-
-#### Summary
-
-The Fall Hearts and Minds program did not have a measurable effect on voters’ issue opinions, but it did significantly affect awareness and their opinions of their legislators. This effect was seen most strongly in districts where the elected officials are Republicans.
-
-The program also had a significant effect on mail recall, but even in the treatment group, the recall percentage was low. We did not appear to move voters’ overall opinion on their states’ general approach to governing.
-
-In terms of modeling persuasion. The TicketSplitter model appears to be somewhat helpful, but a custom model for our programs may outperform it.
-
-
-#### Recommendations
-
-First, we should check how these results compare to previous programs where we contacted folks in both Republican and Democratic districts, but these results strongly suggest focusing our programs in Republican-held districts since we seem to be able to make more of an impact there. 
-
-Secondly, I suggest using this new model, either alone or in conjunction with other targeting criteria to determine our audiences for the 2020 hearts and minds programs. I have not yet scored the entire voter file in our targeted districts using this model. Once that happens, we can see how the scores are distributed among likely voters in each of our districts and the demographics of the audiences in each place.
-
-
 ```{r, include = FALSE}
 cate_df %>%
   mutate(Qfav_flipped_continous = as.factor(Qfav_flipped_continous)) %>%
@@ -929,5 +944,109 @@ cate_df %>%
   summary()
 ```
 
+``` {r, include=F}
 
+fl_effect_df <- tibble(cutoff = seq(.01, .99, .01),
+                          cate_score_effect = NA,
+                          nm_score_effect = NA,
+                          ts_score_effect = NA)
+
+fl_combined_weighted <- combined_weighted %>%
+  filter(state == "FL") %>%
+  mutate(unfav = if_else(grepl(pattern = "Unfav", x = Qfav), 1, 0)) %>%
+  rename(ts_score = "catalistmodel_ticket_splitter") %>%
+  mutate(ts_score = ifelse(is.na(ts_score), 0, ts_score)) %>%
+  select(unfav, ts_score, nm_score, assignment, cate, weight)
+
+for (percentile_cutoff in score_effect_df$cutoff) {
+  print(percentile_cutoff)
+
+  fl_effect_df$nm_score_effect[fl_effect_df$cutoff == percentile_cutoff] <- fl_combined_weighted %>%
+  filter(!is.na(nm_score)) %>%
+  mutate(nm_cat = cut(nm_score, 
+                        breaks = quantile(nm_score, probs = c(0, percentile_cutoff, 1)), 
+                        include.lowest = T, 
+                        labels = c("low","high"))) %>%
+  select(unfav, assignment, nm_cat, weight) %>%
+  unite(col = nm_assignment, nm_cat, assignment) %>%
+  group_by(nm_assignment, unfav) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(unfav==1) %>%
+  select(-c(n, unfav)) %>%
+  spread(nm_assignment, freq) %>%
+  mutate(score_effect = high_treatment - high_control) %>%
+  pull(score_effect)
+
+fl_effect_df$cate_score_effect[fl_effect_df$cutoff == percentile_cutoff] <- fl_combined_weighted %>%
+    mutate(cate_cat = cut(cate, 
+                        breaks = quantile(cate, probs = c(0, percentile_cutoff, 1)), 
+                        include.lowest = T, 
+                        labels = c("low","high"))) %>%
+    select(unfav, assignment, cate_cat, weight) %>%
+    unite(col = cate_assignment, cate_cat, assignment) %>%
+    group_by(cate_assignment, unfav) %>%
+    summarise(n = sum(weight)) %>%
+    mutate(freq = n / sum(n)) %>%
+    filter(unfav==1) %>%
+    select(-c(n, unfav)) %>%
+    spread(cate_assignment, freq) %>%
+    mutate(score_effect = high_treatment - high_control) %>%
+    pull(score_effect)
+  
+  if (percentile_cutoff > (sum(fl_combined_weighted$ts_score == 0) / nrow(fl_combined_weighted)) &
+      percentile_cutoff < (sum(fl_combined_weighted$ts_score < 100) / nrow(fl_combined_weighted))) {
+    fl_effect_df$ts_score_effect[fl_effect_df$cutoff == percentile_cutoff] <- fl_combined_weighted %>%
+      mutate(ts_cat = cut(ts_score, 
+                          breaks = quantile(ts_score, probs = c(0, percentile_cutoff, 1)), 
+                          include.lowest = T, 
+                          labels = c("low","high"))) %>%
+      select(unfav, assignment, ts_cat, weight) %>%
+      unite(col = ts_assignment, ts_cat, assignment) %>%
+      group_by(ts_assignment, unfav) %>%
+      summarise(n = sum(weight)) %>%
+      mutate(freq = n / sum(n)) %>%
+      filter(unfav==1) %>%
+      select(-c(n, unfav)) %>%
+      spread(ts_assignment, freq) %>%
+    mutate(score_effect = high_treatment - high_control) %>%
+      pull(score_effect)
+  }
+}
+
+```
+
+```{r, include=F}
+fl_effect_df %>%
+  mutate(cutoff = cutoff*100) %>%
+  rename(`New Middle` = "nm_score_effect",
+         TicketSplitter = "ts_score_effect",
+         `Florida Model` = "cate_score_effect") %>%
+  gather(score, effect, `Florida Model`:TicketSplitter) %>%
+  ggplot(aes(x=cutoff, y = effect, color = score)) +
+  geom_hline(yintercept = 0, 
+             color='darkgrey') +
+  geom_hline(yintercept = fl_effect_df$nm_score_effect[1],
+             color='grey', 
+             linetype=2) +
+  geom_line(size=1) +
+  theme_minimal() +
+  labs(y = "Program Effect (pp)", title = "Florida",
+       x = "Score Percentile Cutoff") +
+  theme(legend.title = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+```{r, include=F}
+fl_combined_weighted %>%
+  mutate(high_cate = cate > 0.323970,
+         high_ts = ts_score > 0,
+         high_nm = nm_score > 26.534) %>%
+  lm(formula = unfav ~ 
+        assignment*high_cate+
+        assignment*high_nm+
+        assignment*high_ts,
+      weights=weight) %>%
+  summary()
+```
 
