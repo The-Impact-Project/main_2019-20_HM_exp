@@ -19,7 +19,6 @@ library(kableExtra)
 library(causalToolbox)
 ```
 
-
 ```{r targeting_function, include = FALSE}
 roundpercent <- function(num) {scales::percent(num, accuracy = 1)}
 
@@ -242,7 +241,7 @@ overall_fav_effect <- combined_weighted %>%
   round(digits = 1)
 ```
 
-* The program caused a `r overall_fav_effect` percentage point increase in unfavorable ratings in Republican-held districts. There was little movement in Democrat-held districts.
+* The program caused a `r overall_fav_effect` percentage point increase in unfavorable ratings in districts where electeds did not support our economic policies. There was little movement in districts where the elected supported our policies.
 
 * The program caused a small increase in voters' ability to rate their legislators.
 
@@ -254,7 +253,7 @@ overall_fav_effect <- combined_weighted %>%
 
 #### Recommendations
 
-First, we should check how these results compare to previous programs where we contacted folks in both Republican and Democratic districts, but these results strongly suggest focusing our programs in Republican-held districts since we seem to be able to make more of an impact there. 
+First, we should check how these results compare to previous programs where we contacted folks in both supportive and unsupportive districts, but these results strongly suggest focusing our programs in districts where the elected is not supportive of our issues, since we seem to be able to make more of an impact there. 
 
 Secondly, I suggest using this new model, either alone or in conjunction with other targeting criteria to determine our audiences for the 2020 hearts and minds programs. I have not yet scored the entire voter file in our targeted districts using this model. Once that happens, we can see how the scores are distributed among likely voters in each of our districts and the demographics of the audiences in each place.
 
@@ -272,6 +271,18 @@ combined_weighted %>%
   kable() %>%
   kable_styling(position = "center") %>%
   row_spec(0, bold = T)
+```
+
+## Program Details by State
+
+```{r, echo = F, message = F}
+read_csv(here("data", "program_summary_table.csv")) %>%
+  rename(` ` = "metric") %>%
+  kable() %>%
+  column_spec(2:6, width = "2.2cm") %>%
+  row_spec(0, bold = T) %>%
+  column_spec(1, bold = T, width = "2.5cm") %>%
+  kable_styling(font_size = 8)
 ```
 
 ## Baseline Results
@@ -310,27 +321,29 @@ The chart below shows that many people in the treatment group do not recall rece
 
 The low rates of recall are not unusual for a program like this. They could be caused by several factors, such as the voterfile address or phone number not matching the correct person, the voter not being the person in the household who checks mail, survey mismeasurement, or the respondent misremembering. Regardless of the cause, this is a useful metric for putting the rest of the survey results in context.
 
-```{r recall_graph, echo=FALSE, fig.height=3.5}
+```{r recall_graph, echo=FALSE, fig.height=3}
 combined_weighted %>%
   group_by(state, assignment, Qrecall) %>%
   summarise(n = sum(weight)) %>%
   mutate(freq = n / sum(n)) %>%
   filter(Qrecall == "Yes") %>%
-  ggplot(aes(x=state, y = freq)) +
-  geom_bar(aes(fill=assignment), stat = "identity", position="dodge") +
+  ggplot(aes(x=state, y = freq, fill=assignment)) +
+  geom_bar(stat = "identity", position="dodge") +
   theme_minimal() +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_manual(values = c("#bababa",
                                "#018571")) +
   theme(legend.position="bottom",
         legend.title = element_blank()) +
-  labs(x="", y="% That Recall Mail")
+  labs(x="", y="% That Recall Mail") +
+  geom_text(aes(label=round(100*freq, digits = 0)), 
+            position = position_dodge(0.9),
+            vjust=-.25)
 ```
-
 
 ## Favorability
 
-The survey asked respondents to rate the favorability of their elected official as an indicator of whether they truly knew who represented them at the Capitol. Our programs' impact on elected's favorability ratings varies between Republican-held and Democrat-held districts. For this next section, the analysis is separated into these two groups due to this difference.
+The survey asked respondents to rate the favorability of their elected official as an indicator of whether they truly knew who represented them at the Capitol. Our programs' impact on elected's favorability ratings varies between districts where the elected official supports our issues and districts where the elected does not. For this next section, the analysis is separated into these two groups due to this difference.
 
 The effect on favorablity is evaluated in three ways. The first two treat favorability as a _binary_ outcome, while the third treats it as a _continuous_ outcome.
 
@@ -338,13 +351,16 @@ The effect on favorablity is evaluated in three ways. The first two treat favora
 * Do our programs change the percent of people who give **unfavorable** ratings?
 * Do our programs change the **average** favorability, when evaluated on a five-point scale where **strongly unfavorable** = 1 and **strongly favorable** = 5?
 
-#### Democrat-Held Districts
+#### Supportive Districts
 
-In the entire program, we only contacted people living in seven districts that are currently held by Democrats. We recieved `r sum(combined_weighted$dem ==1)` responses from people living in these districts, so the estimates here are less precise than those for Republican-held districts. In the Democratic districts, both favorability and unfavorability trended down. However neither of these changes were significant.
+In the entire program, we only contacted people living in seven districts that are currently held by elected officials that support our issues. We recieved `r sum(combined_weighted$dem ==1)` responses from people living in these districts, so the estimates here are less precise than those for the other districts. In the Democratic districts, both favorability and unfavorability trended down. However neither of these changes were significant.
 
 ```{r dem_fav_chart, echo=FALSE, fig.height=2.5}
 combined_weighted %>%
   filter(dem==1) %>%
+  mutate(Qfav = fct_collapse(Qfav,
+                             "Favorable" = c("Strongly Favorable", "Somewhat Favorable"),
+                             "Unfavorable" = c("Strongly Unfavorable", "Somewhat Unfavorable"))) %>%
   group_by(dem, assignment, Qfav) %>%
   summarize(n = sum(weight)) %>%
   mutate(freq = n / sum(n)) %>%
@@ -352,10 +368,8 @@ combined_weighted %>%
   geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
   coord_flip() +
   scale_fill_manual(values = c("#d01c8b",
-                               "#f1b6da",
                                "#d5d5d5",
                                "#bababa",
-                               "#b8e186",
                                "#4dac26")) +
   scale_y_continuous(labels = scales::percent_format()) +
   theme_minimal() +
@@ -368,13 +382,16 @@ combined_weighted %>%
   labs(x = "", y = "")
 ```
 
-#### Republican-Held Districts
+#### Unsupportive Districts
 
-In the Republican-held districts, we did measure significant effects of our program. Unfavorable ratings significantly increased, and the average score on the five-point scale moved towards _strongly unfavorable_.
+In the districts where the elected does not support our issues, we did measure significant effects of our program. Unfavorable ratings significantly increased, and the average score on the five-point scale moved towards _strongly unfavorable_.
 
 ```{r rep_fav_chart, echo=FALSE, fig.height=2.5}
 combined_weighted %>%
   filter(dem==0) %>%
+  mutate(Qfav = fct_collapse(Qfav,
+                             "Favorable" = c("Strongly Favorable", "Somewhat Favorable"),
+                             "Unfavorable" = c("Strongly Unfavorable", "Somewhat Unfavorable"))) %>%
   group_by(dem, assignment, Qfav) %>%
   summarize(n = sum(weight)) %>%
   mutate(freq = n / sum(n)) %>%
@@ -382,10 +399,8 @@ combined_weighted %>%
   geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
   coord_flip() +
   scale_fill_manual(values = c("#d01c8b",
-                               "#f1b6da",
                                "#d5d5d5",
                                "#bababa",
-                               "#b8e186",
                                "#4dac26")) +
   scale_y_continuous(labels = scales::percent_format()) +
   theme_minimal() +
@@ -398,7 +413,7 @@ combined_weighted %>%
   labs(x = "", y = "")
 ```
 
-To further examine our effect on favorable and unfavorable ratings, the following plot shows the effect broken down by state, and further broken out into Republican-held and Democrat-held districts. The effect on unfavorable ratings in Florida and Arizona are both significant for Republican districts. The remaining states did not show significant changes. Positive numbers (bars above the 0% line) indicate we increased the number of people given that rating. The grey error bars signifiy 95% confidence intervals. So, for example, in the Republican districts in Michigan, we increased favorable ratings by 4% and decreased unfavorable ratings by 2%.
+To further examine our effect on favorable and unfavorable ratings, the following plot shows the effect broken down by state, and further broken out into supportive and unsupportive districts. The effect on unfavorable ratings in Florida and Arizona are both significant for unsupportive districts. The remaining states did not show significant changes. Positive numbers (bars above the 0% line) indicate we increased the number of people given that rating. The grey error bars signifiy 95% confidence intervals. So, for example, in the unsupportive districts in Michigan, we increased favorable ratings by 4% and decreased unfavorable ratings by 2%.
 
 ```{r effect_by_electeds_party_and_state, echo=F, fig.height=3}
 combined_weighted %>%
@@ -413,8 +428,8 @@ combined_weighted %>%
   mutate(low = estimate - (std.error * 1.95),
          high = estimate + (std.error * 1.95)) %>%
   unite(bar_label, state, dem) %>%
-  mutate(bar_label = str_replace(bar_label, "_0", " R"),
-         bar_label = str_replace(bar_label, "_1", " D")) %>%
+  mutate(bar_label = str_replace(bar_label, "_0", "-U"),
+         bar_label = str_replace(bar_label, "_1", "-S")) %>%
   ggplot(aes(x=bar_label, y=estimate, fill=fav_unfav)) +
     geom_bar(stat="identity", position = "dodge") +
     geom_errorbar(aes(ymin=low, ymax=high), 
@@ -424,7 +439,7 @@ combined_weighted %>%
   theme_minimal() +
   geom_hline(yintercept = 0) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(x="State and Elected's Party", 
+  labs(x="State and Elected's Issue Support", 
        y = "Effect on Rating (pp) with 95% CIs",
        fill = "") +
   scale_fill_manual(values = c("#F4D03F", "#3f63f4"))
@@ -606,8 +621,10 @@ summary_nm_ts_table %>%
     kable_styling(position = "center")
 ```
 
-The treatment had little effect on unfavorability in the Republican districts in these states among people with high New Middle scores. Those with high TicketSplitter scores, but low New middle scores saw a significant increase in unfavorability ratings.
+The treatment had little effect on unfavorability in the unsupportive districts in these states among people with high New Middle scores. Those with high TicketSplitter scores, but low New middle scores saw a significant increase in unfavorability ratings.
 
+
+#### % Unfav. in Unsupportive Districts by Audience and Treatment (AZ, ME, MI)
 ```{r, echo=F, fig.height=3}
 nm_ts_dat %>%
   filter(dem==0) %>%
@@ -623,8 +640,10 @@ nm_ts_dat %>%
   scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
   labs(x="",
        y="% Unfavorable",
-       fill="",
-       title="% Unfav. in R Districts by Audience and Treatment (AZ, ME, MI)") +
+       fill="") +
+  geom_text(aes(label=round(100*freq, digits = 1)), 
+            position = position_dodge(width = 0.9),
+            vjust = -.25) +
   theme_minimal()
 ```
 
@@ -722,9 +741,9 @@ mod_df <- combined_weighted %>%
 saveRDS(object = mod_df, file = here("output", "model_df.Rds"))
 ```
 
-## Modeling
+## TIP Persuasion Model
 
-For the final step of this analysis, I built a new model to see how it would compare to the existing models that we had used to target. This model focused only on Republican-held districts, and is built to predict which voters would be more likely to hold unfavorable opinions after receiving treatment from TIP.
+For the final step of this analysis, I built a new model to see how it would compare to the existing models that we had used to target. This model focused only on unsupportive districts, and is built to predict which voters would be more likely to hold unfavorable opinions after receiving treatment from TIP.
 
 #### Technical Details
 
@@ -768,7 +787,7 @@ cate_high_effect <- round(cate_high_effect*100, digits = 1)
 cate_low_effect <- round(cate_low_effect*100, digits = 1)
 ```
 
-The primary way of evaluating the model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest CATE scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high CATE scores. The effect in the high group was `r cate_high_effect` percentage points, and the effect in the low group was `r cate_low_effect`.
+The primary way of evaluating the TIP Persuasion Model is measuring the effect (the difference between the control and treatment group), broken down by people with high and low model scores. The following graph shows this where the 25% of people with the highest TIP persuasion scores are classified as "High," and everyone else is classified as "Low." They important part of the graph is comparing the gap between the bars in the low group compared to that gap in the high group. It seems that the program had an effect in both groups, but it was far stronger in those with high TIP persuasion scores. The effect in the high group was `r cate_high_effect` percentage points, and the effect in the low group was `r cate_low_effect`.
 
 ```{r, echo = FALSE, fig.height=3}
 cate_graph_df %>%
@@ -777,8 +796,11 @@ cate_graph_df %>%
   theme_minimal() +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   labs(y = "Unfavorable %", 
-       x = "CATE Score") +
-  theme(legend.title = element_blank())
+       x = "TIP Persuasion Score") +
+  theme(legend.title = element_blank()) +
+    geom_text(aes(label=round(100*freq, digits = 1)), 
+            position = position_dodge(width = 0.9),
+            vjust = -.25)
 ```
 
 ```{r make_score_effect_df, include = F}
@@ -847,16 +869,18 @@ for (percentile_cutoff in score_effect_df$cutoff) {
 }
 ```
 
-The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead, we can examine how effective the program  would be for using _any_ percentile cutoff. The following graph shows that for the CATE scores as well as the New Middle Scores and the TicketSplitter scores. 
+The graph above uses the 75th percentile as a somewhat arbitrary cutoff. Instead, we can examine how effective the program  would be for using _any_ percentile cutoff. The following graph shows that for the TIP persuasion scores as well as the New Middle Scores and the TicketSplitter scores. 
 
-The lines get more unstable, and slightly less accurate towards the right sides of the graph, because in those cases the targeted group has a very small sample size. However there is still a fairly clear trend showing the CATE model outperforming the other two models. The dashed line indicates the overall effect of the program in Republican-held districts. This is what we'd expect the effect to be using the fairly broad targeting that we used in the Fall program. Ideally, any model would increase the effectiveness of the program, so the models should all be above the dashed line, and they should increase towards the right side of the graph, indicating that the programs become more effective as we limit the audience to the best targets. The following graph clearly shows that this is the case for the CATE model, but not the other two.
+The lines get more unstable, and slightly less accurate towards the right sides of the graph, because in those cases the targeted group has a very small sample size. However there is still a general trend showing the TIP persuasion model outperforming the New Middle model. Ticket Splitter appears to perform somewhat similarly to the TIP persuasion model, but we are missing a lot of data because we only bought this data from Catalist for people with high TicketSplitter Scores.
+
+The dashed line indicates the overall effect of the program in unsupportive districts. This is what we'd expect the effect to be using the fairly broad targeting that we used in the Fall program. Ideally, any model would increase the effectiveness of the program, so the models should all be above the dashed line, and they should increase towards the right side of the graph, indicating that the programs become more effective as we limit the audience to the best targets. The following graph clearly shows that this is the case for the TIP Persuasion model, but the trend is less clear for the other two.
 
 ```{r, echo = FALSE, warning = FALSE, fig.height=3}
 score_effect_df %>%
   mutate(cutoff = cutoff*100) %>%
   rename(`New Middle` = "nm_score_effect",
          TicketSplitter = "ts_score_effect",
-         CATE = "cate_score_effect") %>%
+         `TIP Persuasion Model` = "cate_score_effect") %>%
   gather(score, effect, `New Middle`:TicketSplitter) %>%
   ggplot(aes(x=cutoff, y = effect, color = score)) +
   geom_hline(yintercept = 0, 
@@ -872,9 +896,11 @@ score_effect_df %>%
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))
 ```
 
-#### Demographics of High-CATE Audience
+_**Note on reading above graph:** For example, if we use the 55th percentile as the cutoff, and target the 45% of people with the highest scores, we would have seen an effect of `r round(100*score_effect_df$cate_score_effect[score_effect_df$cutoff==.5], digits =1)` percentage points if we used the TIP persuasion model and an effect of `r round(100*score_effect_df$nm_score_effect[score_effect_df$cutoff==.5], digits =1)` percentage points if we had used new middle._
 
-The following set of tables breaks the survey respondents down into three equal sized groups based on CATE scores. These tables are unweighted, and represent survey respondents, _not_ the entire population from the voterfile. That can be added later to replace these tables.
+#### Demographics of TIP Persuasion Model Audience
+
+The following set of tables breaks the survey respondents down into three equal sized groups based on scores from the TIP persuasion model. These tables are unweighted, and represent survey respondents, _not_ the entire population from the voterfile. That can be added later to replace these tables.
 
 ```{r, echo = FALSE}
 cate_df %>%
