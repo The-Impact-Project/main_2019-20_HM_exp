@@ -1,7 +1,7 @@
 ---
 title: "[DRAFT] Fall 2019 H&M Experiment"
 author: "Andy Zack"
-date: "1/6/2020"
+date: "1/9/2020"
 output: pdf_document
 ---
 
@@ -28,7 +28,7 @@ demo_table <- function(data, var, output_name) {
   
   data %>%
     mutate(cate_cut = cut(cate, 
-                          breaks = quantile(cate_df$cate, c(0, 0.3, 0.6, 1)), 
+                          breaks = quantile(data$cate, c(0, 0.3, 0.6, 1)), 
                           include.lowest = TRUE,
                           labels = c('Low', 'Mid', 'High'))) %>%
     group_by(cate_cut, !! group_var) %>%
@@ -266,9 +266,19 @@ The data was weighted by treatment assignment, education, gender, and legislativ
 ```{r response_rate_table, echo=F}
 combined_weighted %>%
   select(state, assignment) %>%
-  table() %>%
-  addmargins() %>%
-  kable() %>%
+  table() %>% 
+  as_tibble() %>% 
+  spread(assignment, n) %>%
+  mutate(total = control + treatment) %>%
+  bind_rows(tibble(state = "TOTAL", 
+                   control = sum(.$control),
+                   treatment = sum(.$treatment),
+                   total = sum(.$total))) %>%
+  rename(State = state,
+         Control = control,
+         Treatment = treatment,
+         TOTAL = total) %>%
+  kable(format.args = list(big.mark = ',')) %>%
   kable_styling(position = "center") %>%
   row_spec(0, bold = T)
 ```
@@ -482,8 +492,6 @@ combined_weighted %>%
 
 ## Issues
 
-In each state we asked one or two issue support questions about issues specific to that state. Our programs had very little effect on issue support in nearly every state except for Michigan. There we were able to significantly increase support for requiring overtime pay to salaried workers.
-
 ```{r make_issue_df, echo = FALSE}
 issue_df <- bind_rows(
   select(combined_weighted, state, assignment, weight, Q5) %>% filter(!is.na(Q5)) %>% mutate(issue = "A"),
@@ -501,6 +509,23 @@ issue_df <- bind_rows(
                                             "Somewhat Oppose", 
                                             "Strongly Oppose")))
 ```
+
+```{r MI_issue_support, include = F}
+mi_issue_support <- issue_df %>% 
+  filter(state =="MI") %>% 
+  mutate(Qissue = fct_collapse(Qissue, Support = c("Strongly Support", "Somewhat Support"))) %>% 
+  group_by(assignment, Qissue) %>% 
+  summarize(n = sum(weight)) %>% 
+  mutate(freq = n / sum(n)) %>% 
+  filter(Qissue=="Support") %>% 
+  select(assignment, freq) %>% 
+  spread(assignment, freq) %>% 
+  mutate(effect = 100 *  (treatment - control)) %>% 
+  pull(effect) %>% 
+  round()
+```
+
+In each state we asked one or two issue support questions about issues specific to that state. Our programs had very little effect on issue support in nearly every state except for Michigan. There we were able to significantly increase support by `r mi_issue_support` percentage points for requiring overtime pay to salaried workers.
 
 ```{r issue_plot_function, echo = F}
 issue_plot <- function(df, state_abbr, issue_letter) {
@@ -678,8 +703,6 @@ mod_df <- combined_weighted %>%
          ts_tsmart_catholic_raw_score,
          ts_tsmart_otherchristian_raw_score,
          ts_tsmart_ideology_score,
-         ts_tsmart_evangelical_raw_score,
-         ts_tsmart_otherchristian_raw_score,
          ts_tsmart_nonchristian_raw_score,
          ts_tsmart_prochoice_score,
          ts_tsmart_path_to_citizen_score,
@@ -900,46 +923,93 @@ _**Note on reading above graph:** For example, if we use the 55th percentile as 
 
 #### Demographics of TIP Persuasion Model Audience
 
-The following set of tables breaks the survey respondents down into three equal sized groups based on scores from the TIP persuasion model. These tables are unweighted, and represent survey respondents, _not_ the entire population from the voterfile. That can be added later to replace these tables.
+The following set of tables breaks the voterfile in the targeted districts into three equal sized groups based on scores from the TIP persuasion model. This data comes from the voterfile information that was pulled for this program in November 2019. The numbers may vary slightly with newer information. 
 
-```{r, echo = FALSE}
-cate_df %>%
+The "high" category are the persuadable folks based on this model and they are who we would target if we use this persuasion model.
+
+```{r load_scored_df, include = F}
+vf_with_cates <- readRDS(here("output", "vf_with_cates.Rds"))
+
+```
+
+
+```{r, echo = FALSE, warning = F}
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   mutate(age_cat = cut(vb_voterbase_age, breaks = c(17, 50, 65, 75, 101))) %>%
   demo_table(var = age_cat, output_name = "Age") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-cate_df %>%
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   demo_table(var = vb_voterbase_gender, output_name = "Gender") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-cate_df %>%
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   mutate(college = if_else(college==0, "Non-College", "College")) %>%
   demo_table(var = college, output_name = "College") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-cate_df %>%
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
+  mutate(partisan_cat = cut(ts_tsmart_partisan_score, 
+                            include.lowest = T,
+                            breaks = c(0, 50, 100), 
+                            labels = c("Likely Rep.", "Likely Dem."))) %>%
+  demo_table(var = partisan_cat, output_name = "Partisanship Score") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   demo_table(var = threeway_party, output_name = "Party-Registration") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-cate_df %>%
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   demo_table(var = threeway_race, output_name = "Race") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-cate_df %>%
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
   mutate(racegender = if_else(threeway_race == "Caucasian" & vb_voterbase_gender == "Female", "White Women",
                               if_else(threeway_race != "Caucasian" & vb_voterbase_gender == "Female", "Women of Color",
                                       if_else(threeway_race=="Caucasian" & vb_voterbase_gender== "Male", "White Men", "Men of Color")))) %>%
   demo_table(var=racegender, output_name = "Race/Gender") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
+  mutate(evangelical_cat = cut(ts_tsmart_evangelical_raw_score, 
+                               breaks = c(0,50,100),
+                               labels = c("No", "Yes"))) %>%
+  demo_table(var = evangelical_cat, output_name = "Evangelical") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
+  mutate(compassion = cut(predictwise_compassion_score, 
+                          include.lowest = T,
+                               breaks = quantile(vf_with_cates$predictwise_compassion_score, 
+                                                 probs = c(0, .3, .7, 1)),
+                               labels = c("Jerks", "Mid", "Compassionate"))) %>%
+  demo_table(var = compassion, output_name = "Compassion Score") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
