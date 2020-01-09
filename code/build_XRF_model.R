@@ -74,3 +74,18 @@ mod_df %>%
   table() %>%
   prop.table(margin=2) %>%
   round(digits = 3)
+
+# Build Overall Model -----------------------------------------------------
+
+
+full_features <- mod_df %>%
+  select(-non_feature_vars)
+full_w <- if_else(mod_df$assignment == "control", 0, 1)
+full_yobs <- if_else(grepl(pattern = "Unfav", x = mod_df$Qfav), 1, 0)
+
+set.seed(32)
+tictoc::tic()
+full_mod <- X_RF(feat = full_features, tr = full_w, yobs = full_yobs)
+tictoc::toc()
+
+saveRDS(object = full_mod, file = here("output", "full_cate_model.Rds"))
