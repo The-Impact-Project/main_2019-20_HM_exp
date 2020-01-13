@@ -927,30 +927,67 @@ The following set of tables breaks the voterfile in the targeted districts into 
 
 The "high" category are the persuadable folks based on this model and they are who we would target if we use this persuasion model.
 
-```{r load_scored_df, include = F}
-vf_with_cates <- readRDS(here("output", "vf_with_cates.Rds"))
+```{r get_scored_df, include = F}
+query <- sql("SELECT 
+  vb_voterbase_id,
+  vb_vf_party,
+  vb_voterbase_race,
+  vb_education,
+  vb_voterbase_gender,
+  vb_voterbase_age,
+  ts_tsmart_urbanicity,
+  vb_vf_earliest_registration_date,
+  ts_tsmart_presidential_general_turnout_score,
+  ts_tsmart_evangelical_raw_score,
+  ts_tsmart_partisan_score
+  ts_tsmart_ideology_score,
+  predictwise_compassion_score,
+  enh_tsmart_enhanced_party_code,
+  cate
+FROM ts.ntl_current
+	LEFT JOIN impactproject.persuasion_scores USING (vb_voterbase_id)
+WHERE ((vb_tsmart_state = 'AZ' AND vb_tsmart_hd IN ('006', '017', '020', '027', '028', '029'))
+      OR (vb_tsmart_state = 'CO' AND vb_tsmart_sd IN ('016', '019', '025', '026'))
+      OR (vb_tsmart_state = 'FL' AND vb_tsmart_hd IN ('058', '060', '065', '067', '115', '116', '118', '119'))
+      OR (vb_tsmart_state = 'ME' AND vb_tsmart_sd IN ('013', '014', '015', '016'))
+      OR (vb_tsmart_state = 'MI' AND vb_tsmart_hd IN ('019', '035', '039', '042', '071', '110'))
+      OR (vb_tsmart_state = 'NV' AND ( vb_tsmart_hd IN ('004', '027', '029', '037') OR vb_tsmart_sd IN ('006', '008', '009')))
+      OR (vb_tsmart_state = 'PA' AND vb_tsmart_hd IN ('029', '094', '100', '105', '131', '144', '168', '178')))
+  AND vb_voterbase_age > 17
+  AND vb_voterbase_age < 100
+  AND vb_voterbase_deceased_flag IS NULL
+  AND vb_voterbase_registration_status = 'Registered'
+  AND cate IS NOT NULL;")
+
+vf_with_cates <- read_civis(query, database = "TMC") %>%
+  as_tibble() %>%
+  mutate(college = if_else(vb_education %in% c(3,4), 1, 0),
+         threeway_party = if_else(vb_vf_party == "Democrat", "Democrat", 
+                                           if_else(vb_vf_party=="Republican", "Republican", "Other")),
+         threeway_race = fct_recode(vb_voterbase_race,
+                                    Other = "African-American",
+                                    Other = "Asian",
+                                    Other = "Native American",
+                                    Other = "Uncoded"))
 
 ```
 
 
 ```{r, echo = FALSE, warning = F}
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(age_cat = cut(vb_voterbase_age, breaks = c(17, 50, 65, 75, 101))) %>%
   demo_table(var = age_cat, output_name = "Age") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-vf_with_cates %>%
-  filter(!is.na(cate)) %>%
+raw_vf %>%
   demo_table(var = vb_voterbase_gender, output_name = "Gender") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(college = if_else(college==0, "Non-College", "College")) %>%
   demo_table(var = college, output_name = "College") %>%
   kable() %>%
@@ -958,7 +995,6 @@ vf_with_cates %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(partisan_cat = cut(ts_tsmart_partisan_score, 
                             include.lowest = T,
                             breaks = c(0, 50, 100), 
@@ -969,21 +1005,18 @@ vf_with_cates %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   demo_table(var = threeway_party, output_name = "Party-Registration") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   demo_table(var = threeway_race, output_name = "Race") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(racegender = if_else(threeway_race == "Caucasian" & vb_voterbase_gender == "Female", "White Women",
                               if_else(threeway_race != "Caucasian" & vb_voterbase_gender == "Female", "Women of Color",
                                       if_else(threeway_race=="Caucasian" & vb_voterbase_gender== "Male", "White Men", "Men of Color")))) %>%
@@ -993,7 +1026,6 @@ vf_with_cates %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(evangelical_cat = cut(ts_tsmart_evangelical_raw_score, 
                                breaks = c(0,50,100),
                                labels = c("No", "Yes"))) %>%
@@ -1003,7 +1035,6 @@ vf_with_cates %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(compassion = cut(predictwise_compassion_score, 
                           include.lowest = T,
                                breaks = quantile(vf_with_cates$predictwise_compassion_score, 
@@ -1015,7 +1046,6 @@ vf_with_cates %>%
   row_spec(0, bold = T)
 
 vf_with_cates %>%
-  filter(!is.na(cate)) %>%
   mutate(turnout = cut(ts_tsmart_presidential_general_turnout_score, 
                           include.lowest = T,
                                breaks = c(0, 50, 90, 100),
