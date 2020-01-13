@@ -1014,6 +1014,17 @@ vf_with_cates %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
+vf_with_cates %>%
+  filter(!is.na(cate)) %>%
+  mutate(turnout = cut(ts_tsmart_presidential_general_turnout_score, 
+                          include.lowest = T,
+                               breaks = c(0, 50, 90, 100),
+                               labels = c("Unlikely Voter", "Likely", "Very Likely"))) %>%
+  demo_table(var = turnout, output_name = "Pres. Turnout") %>%
+  kable() %>%
+  column_spec(1, width = "3.5cm") %>%
+  row_spec(0, bold = T)
+
 ```
 
 ```{r, include = FALSE}
