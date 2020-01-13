@@ -5,7 +5,6 @@ library(tidyverse)
 library(here)
 library(causalToolbox)
 library(civis)
-library(causalToolbox)
 
 # Load Modeling Data Frame ------------------------------------------------
 mod_df <- readRDS(here("output", "model_df.Rds"))
