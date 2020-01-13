@@ -981,7 +981,7 @@ vf_with_cates %>%
   column_spec(1, width = "3.5cm") %>%
   row_spec(0, bold = T)
 
-raw_vf %>%
+vf_with_cates %>%
   demo_table(var = vb_voterbase_gender, output_name = "Gender") %>%
   kable() %>%
   column_spec(1, width = "3.5cm") %>%
