@@ -939,7 +939,7 @@ query <- sql("SELECT
   vb_vf_earliest_registration_date,
   ts_tsmart_presidential_general_turnout_score,
   ts_tsmart_evangelical_raw_score,
-  ts_tsmart_partisan_score
+  ts_tsmart_partisan_score,
   ts_tsmart_ideology_score,
   predictwise_compassion_score,
   enh_tsmart_enhanced_party_code,
