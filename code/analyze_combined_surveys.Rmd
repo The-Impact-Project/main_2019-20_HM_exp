@@ -1,7 +1,7 @@
 ---
 title: "[DRAFT] Fall 2019 H&M Experiment"
 author: "Andy Zack"
-date: "1/9/2020"
+date: "1/14/2020"
 output: pdf_document
 ---
 
@@ -392,6 +392,7 @@ combined_weighted %>%
   labs(x = "", y = "")
 ```
 
+
 #### Unsupportive Districts
 
 In the districts where the elected does not support our issues, we did measure significant effects of our program. Unfavorable ratings significantly increased, and the average score on the five-point scale moved towards _strongly unfavorable_.
@@ -421,6 +422,38 @@ combined_weighted %>%
                                 "")), 
             position = position_stack(vjust = 0.5, reverse = T)) +
   labs(x = "", y = "")
+```
+
+The following table mirrors the plot above (unsupportive districts), but breaks it out by the respondents' party (taken from TargetSmart partisanship scores, rather than actual registration). You can see that movement is fairly similar among voters in both parties.
+
+```{r rep_fav_chart_faceted, echo=FALSE, fig.height=2.5}
+combined_weighted %>%
+  filter(dem==0) %>%
+  mutate(Qfav = fct_collapse(Qfav,
+                             "Favorable" = c("Strongly Favorable", "Somewhat Favorable"),
+                             "Unfavorable" = c("Strongly Unfavorable", "Somewhat Unfavorable")),
+         voter_party = if_else(ts_tsmart_partisan_score > 50, "Dem.", "Rep.")) %>%
+  group_by(dem, voter_party, assignment, Qfav) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qfav)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  facet_wrap(~voter_party) +
+  coord_flip() +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="none",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
 ```
 
 To further examine our effect on favorable and unfavorable ratings, the following plot shows the effect broken down by state, and further broken out into supportive and unsupportive districts. The effect on unfavorable ratings in Florida and Arizona are both significant for unsupportive districts. The remaining states did not show significant changes. Positive numbers (bars above the 0% line) indicate we increased the number of people given that rating. The grey error bars signifiy 95% confidence intervals. So, for example, in the unsupportive districts in Michigan, we increased favorable ratings by 4% and decreased unfavorable ratings by 2%.
