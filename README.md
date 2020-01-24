@@ -1,10 +1,10 @@
 # main_2019-20_HM_exp
 
 ## Summary
-This contains the list pull, randomization, and analysis files for the 7 state HM study from Fall 2019 to 2020. The program is being run in AZ, CO, FL, ME, MI, NV, and PA.
+This contains the list pull, randomization, and analysis files for the 7 state HM study from Fall 2019 to 2020. The program is being run in AZ, CO, FL, ME, MI, NV, and PA. UPDATE: Because things are a bit of shitshow, we ended up cutting PA and NV from this experiment; those states were not able to start their programs on time for it to make sense to run the survey there, and we did not want to delay the survey.
 
 ## Programs
-The programs vary from state to state. However they all are starting in October or November 2019 and will culminate in a mid-point survey in December. Check with each state director for better info on each program, or look in the google drive in the experiments folder.
+The programs vary from state to state. However they all started in October or November 2019 and culminated in a mid-point survey in December. Check with each state director for better info on each program, or look in the google drive in the experiments folder.
 
 ## Listpull
 
@@ -56,6 +56,11 @@ AMM performed the phone screens for this project. We sent them a separate list f
 
 #### Code
 - `pull_[STATE]_list.R` has the SQL list pull as well as the R that randomizes and saves data.
+- `combine_lists_for_survey.R` combineds the randomized files from `pull_[STATE]_list.R`. The purpose of this is to have one file that can has all the data across states called `all_randomized_dat.Rds`. It also creates the CSVs that we sent to AMM, so that they can run the survey.
+- `analyze_combined_surveys.Rmd` is the main analysis code for this project. It creates a long report. It has to be run in conjunction with `build_XRF_model.R`. We ended up not using much of the data from this though because our lawyer decided we cannot look at favorability or use the persuasion model described in the report.
+- `build_XRF_model.R` Runs the `causaltools::X_RF()` code to build the TIP persuasion model, though we ended up not using this because it did not get legal approval. To run this, you need to first run the `analyze_combined_surveys.Rmd` code, then run this, and then run the Rmd code a second time.
+- `analyze_maine_survey.Rmd` just makes a short report based on the data from the state of Maine. This was done because the Maine survey happened first, and they wanted some report on it.
+- `florida_report.Rmd` is the markdown document that creates a short report with some graphs on Florida results and shows the breakdown by districts there. It is basically a very short version of the main report
 
 #### Data and Output
 This is not in the repo but can be found in each states folder in the experiment directory on google drive.
