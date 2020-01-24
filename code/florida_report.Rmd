@@ -1,0 +1,302 @@
+---
+title: "Florida Report"
+author: "Andy Zack"
+date: "1/22/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(here)
+library(kableExtra)
+```
+
+
+```{r, include = FALSE}
+fl_weighted <- readRDS(here("output", "combined_weighted.Rds")) %>%
+  filter(vb_tsmart_state == "FL") %>%
+  mutate(vb_tsmart_hd = str_pad(vb_tsmart_hd, 3, pad = "0")) %>%
+  mutate(Q5A_cat = recode(as.character(Q5A),
+                         "1" = "Strongly Support",
+                         "2" = "Somewhat Support",
+                         "3" = "Somewhat Oppose",
+                         "4" = "Strongly Oppose",
+                         "8888" = "No Opinion")) %>%
+  mutate(Q5B_cat = recode(as.character(Q5B),
+                         "1" = "Strongly Support",
+                         "2" = "Somewhat Support",
+                         "3" = "Somewhat Oppose",
+                         "4" = "Strongly Oppose",
+                         "8888" = "No Opinion")) %>%  
+  mutate(Q5A_cat = factor(Q5A_cat, levels = c("Strongly Support", 
+                                            "Somewhat Support", 
+                                            "No Opinion", 
+                                            "Somewhat Oppose", 
+                                            "Strongly Oppose"))) %>%
+  mutate(Q5B_cat = factor(Q5B_cat, levels = c("Strongly Support", 
+                                            "Somewhat Support", 
+                                            "No Opinion", 
+                                            "Somewhat Oppose", 
+                                            "Strongly Oppose")))
+```
+
+## Respondents by Treatment Assignment and State House District
+
+```{r, echo = FALSE}
+fl_weighted %>%
+  select(vb_tsmart_hd, assignment) %>%
+  table() %>% 
+  as_tibble() %>% 
+  spread(assignment, n) %>%
+  mutate(total = control + treatment) %>%
+  bind_rows(tibble(vb_tsmart_hd = "TOTAL", 
+                   control = sum(.$control),
+                   treatment = sum(.$treatment),
+                   total = sum(.$total))) %>%
+  rename(HD = vb_tsmart_hd,
+         Control = control,
+         Treatment = treatment,
+         TOTAL = total) %>%
+  kable(format.args = list(big.mark = ',')) %>%
+  kable_styling(position = "center") %>%
+  row_spec(0, bold = T)
+```
+
+## Mail Recall by District
+
+```{r, echo = FALSE}
+fl_weighted %>%
+  group_by(vb_tsmart_hd, assignment, Qrecall) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(Qrecall == "Yes") %>%
+  ggplot(aes(x=vb_tsmart_hd, y = freq, fill=assignment)) +
+  geom_bar(stat = "identity", position="dodge") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("#bababa",
+                               "#018571")) +
+  theme(legend.position="bottom",
+        legend.title = element_blank()) +
+  labs(x="", y="% That Recall Mail") +
+  geom_text(aes(label=round(100*freq, digits = 0)), 
+            position = position_dodge(0.9),
+            vjust=-.25)
+```
+
+## FL Name ID And Favorability
+
+```{r, echo = FALSE, fig.height= 2}
+fl_weighted %>%
+  mutate(Qfav = fct_collapse(Qfav,
+                             "Favorable" = c("Strongly Favorable", "Somewhat Favorable"),
+                             "Unfavorable" = c("Strongly Unfavorable", "Somewhat Unfavorable"))) %>%
+  group_by(dem, assignment, Qfav) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qfav)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+## Name ID and Favorability by District
+
+```{r, echo = FALSE}
+fl_weighted %>%
+  mutate(Qfav = fct_collapse(Qfav,
+                             "Favorable" = c("Strongly Favorable", "Somewhat Favorable"),
+                             "Unfavorable" = c("Strongly Unfavorable", "Somewhat Unfavorable"))) %>%
+  group_by(dem, vb_tsmart_hd, assignment, Qfav) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qfav)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#d01c8b",
+                               "#d5d5d5",
+                               "#bababa",
+                               "#4dac26")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "") +
+  facet_wrap(~vb_tsmart_hd, ncol = 2)
+```
+
+## FL Government Approach
+
+```{r approach_graph, echo=FALSE, fig.height=2}
+fl_weighted %>%
+  mutate(Qapproach = fct_collapse(Qapproach, "Both/DK/Something else" = c("Both", "Don't Know", "Something else"))) %>%
+  group_by(assignment, Qapproach) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qapproach)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#2b83ba",
+                               '#bababa',
+                               "#d7191c")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = .1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+## Government Approach by District
+
+```{r approach_graph_byHD, echo=FALSE}
+fl_weighted %>%
+  mutate(Qapproach = fct_collapse(Qapproach, "Both/DK/Something else" = c("Both", "Don't Know", "Something else"))) %>%
+  group_by(vb_tsmart_hd, assignment, Qapproach) %>%
+  summarise(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Qapproach)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  facet_wrap(~vb_tsmart_hd, ncol = 2) +
+  scale_fill_manual(values = c("#2b83ba",
+                               '#bababa',
+                               "#d7191c")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+## Support for Family Leave
+
+```{r issue_support_graph, echo = F, fig.height=2}
+fl_weighted %>%
+  group_by(assignment, Q5A_cat) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Q5A_cat)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#e66101",
+                               "#fdb863",
+                               "#f7f7f7",
+                               "#b2abd2",
+                               "#5e3c99")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+
+```{r issue_support_graph_byHD, echo = F}
+fl_weighted %>%
+  mutate(Q5A_cat = fct_collapse(Q5A_cat,
+                                Support = c("Strongly Support", "Somewhat Support"),
+                                Oppose = c("Strongly Oppose", "Somewhat Oppose"))) %>%
+  group_by(vb_tsmart_hd, assignment, Q5A_cat) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Q5A_cat)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#e66101",
+                               "#f7f7f7",
+                               "#5e3c99")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  facet_wrap(~vb_tsmart_hd, ncol = 2) +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+## Support for Protecting Pre-existing Conditions
+
+```{r issue_support_graph_B, echo = F, fig.height=2}
+fl_weighted %>%
+  group_by(assignment, Q5B_cat) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Q5B_cat)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#e66101",
+                               "#fdb863",
+                               "#f7f7f7",
+                               "#b2abd2",
+                               "#5e3c99")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
+
+```{r issue_support_graph_byHD_B, echo = F}
+fl_weighted %>%
+  mutate(Q5B_cat = fct_collapse(Q5B_cat,
+                                Support = c("Strongly Support", "Somewhat Support"),
+                                Oppose = c("Strongly Oppose", "Somewhat Oppose"))) %>%
+  group_by(vb_tsmart_hd, assignment, Q5B_cat) %>%
+  summarize(n = sum(weight)) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot(aes(x=assignment, y = freq, fill = Q5B_cat)) +
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  scale_fill_manual(values = c("#e66101",
+                               "#f7f7f7",
+                               "#5e3c99")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme_minimal() +
+  facet_wrap(~vb_tsmart_hd, ncol = 2) +
+  theme(legend.position="top",
+        legend.title = element_blank()) +
+  geom_text(aes(label = if_else(freq >= 0.02, 
+                                scales::percent(freq, accuracy = 1),
+                                "")), 
+            position = position_stack(vjust = 0.5, reverse = T)) +
+  labs(x = "", y = "")
+```
