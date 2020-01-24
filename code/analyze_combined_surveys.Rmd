@@ -217,7 +217,8 @@ combined_weighted <- combined_weighted %>%
   select(-catalistmodel_ticket_splitter) %>%
   left_join(ts_scores)
 
-#remove(ids, query, ts_scores)
+combined_weighted %>%
+  saveRDS(here("output", "combined_weighted.Rds"))
 ```
 
 ## Summary
@@ -1128,7 +1129,7 @@ fl_combined_weighted <- combined_weighted %>%
   mutate(ts_score = ifelse(is.na(ts_score), 0, ts_score)) %>%
   select(unfav, ts_score, nm_score, assignment, cate, weight)
 
-for (percentile_cutoff in score_effect_df$cutoff) {
+for (percentile_cutoff in fl_effect_df$cutoff) {
   print(percentile_cutoff)
 
   fl_effect_df$nm_score_effect[fl_effect_df$cutoff == percentile_cutoff] <- fl_combined_weighted %>%
